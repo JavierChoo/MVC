@@ -1,36 +1,24 @@
 const express = require('express');
-const mysql = require('mysql2');
 const session = require('express-session');
 const flash = require('connect-flash');
 const multer = require('multer');
+const path = require('path');
 const app = express();
+
+const ProductController = require('./controllers/ProductController'); // per request
+const Product = require('./models/Product'); // used for session-cart lookups
 
 // Set up multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'public/images'); // Directory to save uploaded files
+        cb(null, path.join(__dirname, 'public', 'images')); // Directory to save uploaded files
     },
     filename: (req, file, cb) => {
-        cb(null, file.originalname); 
+        // keep original name but prefix with timestamp to avoid collisions
+        cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '-'));
     }
 });
-
 const upload = multer({ storage: storage });
-
-const connection = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'Republic_C207',
-    database: 'c372_supermarketdb'
-  });
-
-connection.connect((err) => {
-    if (err) {
-        console.error('Error connecting to MySQL:', err);
-        return;
-    }
-    console.log('Connected to MySQL database');
-});
 
 // Set up view engine
 app.set('view engine', 'ejs');
@@ -40,8 +28,9 @@ app.use(express.static('public'));
 app.use(express.urlencoded({
     extended: false
 }));
+app.use(express.json());
 
-//TO DO: Insert code for Session Middleware below 
+// Session & flash
 app.use(session({
     secret: 'secret',
     resave: false,
@@ -49,7 +38,6 @@ app.use(session({
     // Session expires after 1 week of inactivity
     cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 } 
 }));
-
 app.use(flash());
 
 // Middleware to check if user is logged in
@@ -64,7 +52,7 @@ const checkAuthenticated = (req, res, next) => {
 
 // Middleware to check if user is admin
 const checkAdmin = (req, res, next) => {
-    if (req.session.user.role === 'admin') {
+    if (req.session.user && req.session.user.role === 'admin') {
         return next();
     } else {
         req.flash('error', 'Access denied');
@@ -93,12 +81,9 @@ app.get('/',  (req, res) => {
     res.render('index', {user: req.session.user} );
 });
 
+// Inventory - delegate to controller (controller should handle rendering/redirecting)
 app.get('/inventory', checkAuthenticated, checkAdmin, (req, res) => {
-    // Fetch data from MySQL
-    connection.query('SELECT * FROM products', (error, results) => {
-      if (error) throw error;
-      res.render('inventory', { products: results, user: req.session.user });
-    });
+    ProductController.list(req, res);
 });
 
 app.get('/register', (req, res) => {
@@ -106,15 +91,15 @@ app.get('/register', (req, res) => {
 });
 
 app.post('/register', validateRegistration, (req, res) => {
-
     const { username, email, password, address, contact, role } = req.body;
 
+    // keep registration logic here (not product-related)
+    const db = require('./db');
     const sql = 'INSERT INTO users (username, email, password, address, contact, role) VALUES (?, ?, SHA1(?), ?, ?, ?)';
-    connection.query(sql, [username, email, password, address, contact, role], (err, result) => {
+    db.query(sql, [username, email, password, address, contact, role], (err, result) => {
         if (err) {
             throw err;
         }
-        console.log(result);
         req.flash('success', 'Registration successful! Please log in.');
         res.redirect('/login');
     });
@@ -133,8 +118,9 @@ app.post('/login', (req, res) => {
         return res.redirect('/login');
     }
 
+    const db = require('./db');
     const sql = 'SELECT * FROM users WHERE email = ? AND password = SHA1(?)';
-    connection.query(sql, [email, password], (err, results) => {
+    db.query(sql, [email, password], (err, results) => {
         if (err) {
             throw err;
         }
@@ -155,47 +141,36 @@ app.post('/login', (req, res) => {
     });
 });
 
+// Shopping - use controller to list products (controller should render shopping view)
 app.get('/shopping', checkAuthenticated, (req, res) => {
-    // Fetch data from MySQL
-    connection.query('SELECT * FROM products', (error, results) => {
-        if (error) throw error;
-        res.render('shopping', { user: req.session.user, products: results });
-      });
+    ProductController.list(req, res);
 });
 
+// Add to cart uses model to fetch single product and store in session cart
 app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => {
-    const productId = parseInt(req.params.id);
-    const quantity = parseInt(req.body.quantity) || 1;
+    const productId = parseInt(req.params.id, 10);
+    const quantity = parseInt(req.body.quantity, 10) || 1;
 
-    connection.query('SELECT * FROM products WHERE id = ?', [productId], (error, results) => {
-        if (error) throw error;
+    Product.getById(productId, (err, product) => {
+        if (err) return res.status(500).send('Server error');
+        if (!product) return res.status(404).send('Product not found');
 
-        if (results.length > 0) {
-            const product = results[0];
+        if (!req.session.cart) req.session.cart = [];
 
-            // Initialize cart in session if not exists
-            if (!req.session.cart) {
-                req.session.cart = [];
-            }
-
-            // Check if product already in cart
-            const existingItem = req.session.cart.find(item => item.productId === productId);
-            if (existingItem) {
-                existingItem.quantity += quantity;
-            } else {
-                req.session.cart.push({
-                    id: product.productId,
-                    productName: product.productName,
-                    price: product.price,
-                    quantity: quantity,
-                    image: product.image
-                });
-            }
-
-            res.redirect('/cart');
+        const existingItem = req.session.cart.find(item => item.productId === productId);
+        if (existingItem) {
+            existingItem.quantity += quantity;
         } else {
-            res.status(404).send("Product not found");
+            req.session.cart.push({
+                productId: productId,
+                productName: product.productName,
+                price: product.price,
+                quantity: quantity,
+                image: product.image
+            });
         }
+
+        res.redirect('/cart');
     });
 });
 
@@ -210,107 +185,62 @@ app.get('/logout', (req, res) => {
 });
 
 app.get('/product/:id', checkAuthenticated, (req, res) => {
-  // Extract the product ID from the request parameters
-  const productId = req.params.id;
-
-  // Fetch data from MySQL based on the product ID
-  connection.query('SELECT * FROM products WHERE id = ?', [productId], (error, results) => {
-      if (error) throw error;
-
-      // Check if any product with the given ID was found
-      if (results.length > 0) {
-          // Render HTML page with the product data
-          res.render('product', { product: results[0], user: req.session.user  });
-      } else {
-          // If no product with the given ID was found, render a 404 page or handle it accordingly
-          res.status(404).send('Product not found');
-      }
-  });
+    // delegate to controller to show single product (controller should render product view)
+    ProductController.getById(req, res);
 });
 
 app.get('/addProduct', checkAuthenticated, checkAdmin, (req, res) => {
     res.render('addProduct', {user: req.session.user } ); 
 });
 
+// Add product - handle file upload then delegate to controller.create
 app.post('/addProduct', upload.single('image'),  (req, res) => {
-    // Extract product data from the request body
-    const { name, quantity, price} = req.body;
-    let image;
+    // normalize form field names expected by controller/model
+    req.body.productName = req.body.name;
+    req.body.quantity = req.body.quantity ? Number(req.body.quantity) : null;
+    req.body.price = req.body.price ? Number(req.body.price) : null;
     if (req.file) {
-        image = req.file.filename; // Save only the filename
+        req.body.image = '/images/' + req.file.filename;
     } else {
-        image = null;
+        req.body.image = req.body.image || null;
     }
 
-    const sql = 'INSERT INTO products (productName, quantity, price, image) VALUES (?, ?, ?, ?)';
-    // Insert the new product into the database
-    connection.query(sql , [name, quantity, price, image], (error, results) => {
-        if (error) {
-            // Handle any error that occurs during the database operation
-            console.error("Error adding product:", error);
-            res.status(500).send('Error adding product');
-        } else {
-            // Send a success response
-            res.redirect('/inventory');
-        }
+    ProductController.create(req, res);
+});
+
+// Render update product form - fetch product via model and render (keeps existing behavior)
+app.get('/updateProduct/:id', checkAuthenticated, checkAdmin, (req, res) => {
+    const productId = parseInt(req.params.id, 10);
+    Product.getById(productId, (err, product) => {
+        if (err) return res.status(500).send('Server error');
+        if (!product) return res.status(404).send('Product not found');
+        res.render('updateProduct', { product, user: req.session.user });
     });
 });
 
-app.get('/updateProduct/:id',checkAuthenticated, checkAdmin, (req,res) => {
-    const productId = req.params.id;
-    const sql = 'SELECT * FROM products WHERE id = ?';
-
-    // Fetch data from MySQL based on the product ID
-    connection.query(sql , [productId], (error, results) => {
-        if (error) throw error;
-
-        // Check if any product with the given ID was found
-        if (results.length > 0) {
-            // Render HTML page with the product data
-            res.render('updateProduct', { product: results[0] });
-        } else {
-            // If no product with the given ID was found, render a 404 page or handle it accordingly
-            res.status(404).send('Product not found');
-        }
-    });
-});
-
+// Update product - handle file upload and delegate to controller.update
 app.post('/updateProduct/:id', upload.single('image'), (req, res) => {
     const productId = req.params.id;
-    // Extract product data from the request body
-    const { name, quantity, price } = req.body;
-    let image  = req.body.currentImage; //retrieve current image filename
-    if (req.file) { //if new image is uploaded
-        image = req.file.filename; // set image to be new image filename
-    } 
+    req.body.productName = req.body.name;
+    req.body.quantity = req.body.quantity ? Number(req.body.quantity) : null;
+    req.body.price = req.body.price ? Number(req.body.price) : null;
 
-    const sql = 'UPDATE products SET productName = ? , quantity = ?, price = ?, image =? WHERE id = ?';
-    // Insert the new product into the database
-    connection.query(sql, [name, quantity, price, image, productId], (error, results) => {
-        if (error) {
-            // Handle any error that occurs during the database operation
-            console.error("Error updating product:", error);
-            res.status(500).send('Error updating product');
-        } else {
-            // Send a success response
-            res.redirect('/inventory');
-        }
-    });
+    // preserve current image if no new file uploaded
+    if (req.file) {
+        req.body.image = '/images/' + req.file.filename;
+    } else {
+        req.body.image = req.body.currentImage || null;
+    }
+
+    // ensure req.params.id is available to controller
+    req.params.id = productId;
+    ProductController.update(req, res);
 });
 
-app.get('/deleteProduct/:id', (req, res) => {
-    const productId = req.params.id;
-
-    connection.query('DELETE FROM products WHERE id = ?', [productId], (error, results) => {
-        if (error) {
-            // Handle any error that occurs during the database operation
-            console.error("Error deleting product:", error);
-            res.status(500).send('Error deleting product');
-        } else {
-            // Send a success response
-            res.redirect('/inventory');
-        }
-    });
+// Delete product - delegate to controller.delete (controller should redirect)
+app.get('/deleteProduct/:id', checkAuthenticated, checkAdmin, (req, res) => {
+    // Prefer controller to handle deletion and redirecting
+    ProductController.delete(req, res);
 });
 
 const PORT = process.env.PORT || 3000;
