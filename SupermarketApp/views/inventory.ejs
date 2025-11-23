@@ -1,63 +1,89 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inventory - Supermarket App</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <title>Supermarket App</title>
 </head>
-<body>
-    <nav class="navbar navbar-expand-sm bg-dark navbar-dark">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="/">Supermarket App</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#collapsibleNavbar">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="collapsibleNavbar">
-          <ul class="navbar-nav">
-            <li class="nav-item">
-              <a class="nav-link" href="/addProduct">Add Product</a>
-            </li> 
-            <li class="nav-item">
-              <a class="nav-link" href="/logout">Logout</a>
-            </li> 
-          </ul>
+<body class="bg-light">
+
+  <%- include("partials/navbar", { user: user }) %>
+
+  <div class="container py-4">
+    <% if (errors && errors.length) { %>
+      <div class="alert alert-danger">
+        <% errors.forEach(function(e){ %><div><%= e %></div><% }) %>
+      </div>
+    <% } %>
+
+    <% if (messages && messages.length) { %>
+      <div class="alert alert-success">
+        <% messages.forEach(function(m){ %><div><%= m %></div><% }) %>
+      </div>
+    <% } %>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="mb-0">Inventory</h2>
+      <div>
+        <a href="/addProduct" class="btn btn-primary">Add Product</a>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th scope="col" style="width:120px;">Image</th>
+                <th scope="col">Name</th>
+                <th scope="col" style="width:120px;">Price</th>
+                <th scope="col" style="width:120px;">Quantity</th>
+                <th scope="col" style="width:160px;" class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (!products || products.length === 0) { %>
+                <tr>
+                  <td colspan="5" class="text-center py-4">
+                    <div>
+                      <p class="mb-2">No products found.</p>
+                      <a href="/addProduct" class="btn btn-sm btn-primary">Add your first product</a>
+                    </div>
+                  </td>
+                </tr>
+              <% } else { %>
+                <% products.forEach(function(product) { 
+                     const imgSrc = product.image
+                       ? (typeof product.image === 'string' && product.image.startsWith('/') ? product.image : '/images/' + product.image)
+                       : '/images/default.png';
+                %>
+                  <tr>
+                    <td>
+                      <img src="<%= imgSrc %>" alt="<%= product.productName %>" class="img-fluid rounded" style="max-width:100px; height:60px; object-fit:cover;">
+                    </td>
+                    <td>
+                      <a href="/product/<%= product.id %>" class="text-decoration-none"><strong><%= product.productName %></strong></a>
+                    </td>
+                    <td>$<%= (product.price || 0).toFixed(2) %></td>
+                    <td><%= product.quantity != null ? product.quantity : '-' %></td>
+                    <td class="text-end">
+                      <a href="/updateProduct/<%= product.id %>" class="btn btn-sm btn-warning me-2">Edit</a>
+                      <a href="/deleteProduct/<%= product.id %>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this product?')">Delete</a>
+                    </td>
+                  </tr>
+                <% }); %>
+              <% } %>
+            </tbody>
+          </table>
         </div>
       </div>
-    </nav>
-
-  <div class="container">
-    <p>Welcome, <%= user.username %> (<%= user.role %>)</p>
-    <br>
-    <div class="text-center"><h2>Products from Supermarket App Database</h2></div>
-    <br>
-    <table class="table table-hover small text-center">
-      <thead>
-          <tr>
-            <th width="100">Product Name</th>
-            <th width="100">Product Image</th>
-            <th width="50">Quantity</th>
-            <th width="50">Price</th>
-            <th width="50">Edit</th>
-            <th width="50">Delete</th>
-          </tr>
-      </thead>
-      <tbody>
-        <% for(let i=0; i < products.length; i++) { %>
-          <tr>
-            <td><a href="/product/<%= products[i].id %>" ><%= products[i].productName %></a></td>
-            <td><img src = "images/<%= products[i].image %>" width="20%"></td>
-            <td><%= products[i].quantity %></td>
-            <td>$<%= products[i].price.toFixed(2) %></td>
-            <!-- Edit Link -->
-            <td><a href="/updateProduct/<%= products[i].id %>">Edit</a></td>
-            <!-- Delete Link -->
-            <td><a href="/deleteProduct/<%= products[i].id %>" onclick="return confirm('Are you sure you want to delete this product?')">Delete</a></td>
-          </tr>
-        <% } %>
-      </tbody>
-    </table>
+    </div>
   </div>
+
+  <%- include("partials/footer") %>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
