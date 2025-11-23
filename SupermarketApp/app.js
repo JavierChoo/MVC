@@ -43,9 +43,6 @@ const upload = multer({ storage, fileFilter });
    Express / view settings
    ------------------------- */
 app.set('view engine', 'ejs');
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
 
 /* -------------------------
    Session & flash
@@ -57,15 +54,55 @@ app.use(session({
   cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 } // 1 week
 }));
 app.use(flash());
+app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+/*
+  Ensure res.locals.user is populated for every request so all views
+  (including navbar) can access user via the `user` variable automatically.
+  Also expose flash messages as arrays for EJS checks.
+*/
+app.use((req, res, next) => {
+  res.locals.user = req.session && req.session.user ? req.session.user : null;
+  res.locals.messages = req.flash('success') || [];
+  res.locals.errors = req.flash('error') || [];
+  next();
+});
 
 /* -------------------------
-   Make flash & user available in all views
+   Safe handler wrapper
    ------------------------- */
-app.use((req, res, next) => {
-  res.locals.user = req.session.user || null;
-  res.locals.messages = req.flash('success');
-  res.locals.errors = req.flash('error');
-  next();
+/**
+ * Returns a request handler that calls controller[fnName] if available,
+ * otherwise responds with a safe redirect and flash message.
+ */
+function safeHandler(controller, fnName) {
+  return function (req, res, next) {
+    if (controller && typeof controller[fnName] === 'function') {
+      try {
+        return controller[fnName](req, res, next);
+      } catch (err) {
+        console.error(`Error in handler ${fnName}:`, err);
+        req.flash('error', 'Server error');
+        return res.redirect('/');
+      }
+    }
+    console.error(`Missing handler: ${fnName} on controller`, controller && controller.constructor && controller.constructor.name);
+    req.flash('error', 'Server error: handler not available');
+    return res.redirect('/');
+  };
+}
+
+/* Log missing controllers early (helps debugging if require failed) */
+[
+  ['ProductController', ProductController],
+  ['UserController', UserController],
+  ['CartController', CartController],
+  ['OrderController', OrderController],
+  ['CheckoutController', CheckoutController]
+].forEach(([name, ctrl]) => {
+  if (!ctrl) console.error(`${name} is undefined after require`);
 });
 
 /* -------------------------
@@ -74,28 +111,32 @@ app.use((req, res, next) => {
 
 /* Home */
 app.get('/', (req, res) => {
-  res.render('index', { user: req.session.user });
+  // simple home render; res.locals.user is available in views
+  res.render('index', { messages: req.flash('success'), errors: req.flash('error') });
 });
 
 /* User auth */
-app.get('/register', UserController.showRegisterForm);
-app.post('/register', validateRegistration, UserController.registerUser);
+app.get('/register', safeHandler(UserController, 'showRegister'));
+app.post('/register', validateRegistration, safeHandler(UserController, 'registerUser'));
 
-app.get('/login', UserController.showLoginForm);
-app.post('/login', UserController.loginUser);
+// Some projects use alternative function names; safeHandler will catch missing ones.
+// Login routes
+app.get('/login', safeHandler(UserController, 'showLogin'));
+app.post('/login', safeHandler(UserController, 'loginUser'));
 
-app.get('/logout', UserController.logoutUser);
+app.get('/logout', safeHandler(UserController, 'logoutUser'));
 
 /* Products / Inventory */
-app.get('/inventory', checkAuthenticated, checkAdmin, ProductController.list);
-app.get('/shopping', checkAuthenticated, ProductController.list);
+app.get('/inventory', checkAuthenticated, checkAdmin, safeHandler(ProductController, 'list'));
+app.get('/shopping', checkAuthenticated, safeHandler(ProductController, 'list'));
 
 /* Single product view */
-app.get('/product/:id', checkAuthenticated, ProductController.getById);
+app.get('/product/:id', checkAuthenticated, safeHandler(ProductController, 'getById'));
 
 /* Add product form (render) */
 app.get('/addProduct', checkAuthenticated, checkAdmin, (req, res) => {
-  res.render('addProduct', { user: req.session.user, formData: req.flash('formData')[0] });
+  // render add product form; res.locals.user is available
+  res.render('addProduct', { formData: req.flash('formData')[0], messages: req.flash('success'), errors: req.flash('error') });
 });
 
 /* Create product */
@@ -105,7 +146,7 @@ app.post(
   checkAdmin,
   upload.single('image'),
   validateProduct,
-  (req, res) => ProductController.create(req, res)
+  safeHandler(ProductController, 'create')
 );
 
 /* Render update product form */
@@ -121,7 +162,7 @@ app.get('/updateProduct/:id', checkAuthenticated, checkAdmin, (req, res) => {
       req.flash('error', 'Product not found');
       return res.redirect('/inventory');
     }
-    res.render('updateProduct', { product, user: req.session.user });
+    res.render('updateProduct', { product, messages: req.flash('success'), errors: req.flash('error') });
   });
 });
 
@@ -130,21 +171,22 @@ app.post(
   '/updateProduct/:id',
   checkAuthenticated,
   checkAdmin,
-  upload.single('image'),      // multer will not error when no file is present
+  upload.single('image'),
   validateProduct,
-  (req, res) => ProductController.update(req, res)
+  safeHandler(ProductController, 'update')
 );
 
 /* Delete product */
 app.get('/deleteProduct/:id', checkAuthenticated, checkAdmin, (req, res) => {
-  ProductController.delete(req, res);
+  // call safely
+  return safeHandler(ProductController, 'delete')(req, res);
 });
 
 /* Cart (persistent cart via CartController) */
-app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => CartController.addToCart(req, res));
-app.get('/cart', checkAuthenticated, (req, res) => CartController.viewCart(req, res));
-app.post('/cart/update/:id', checkAuthenticated, (req, res) => CartController.updateCartItem(req, res));
-app.post('/cart/clear', checkAuthenticated, (req, res) => CartController.clearCart(req, res));
+app.post('/add-to-cart/:id', checkAuthenticated, safeHandler(CartController, 'addToCart'));
+app.get('/cart', checkAuthenticated, safeHandler(CartController, 'viewCart'));
+app.post('/cart/update/:id', checkAuthenticated, safeHandler(CartController, 'updateCartItem'));
+app.post('/cart/clear', checkAuthenticated, safeHandler(CartController, 'clearCart'));
 
 /* Checkout */
 app.get('/checkout', checkAuthenticated, (req, res) => {
@@ -161,19 +203,19 @@ app.get('/checkout', checkAuthenticated, (req, res) => {
         req.flash('error', 'Unable to load cart');
         return res.redirect('/cart');
       }
-      res.render('checkout', { cart: items || [], user, messages: req.flash('success'), errors: req.flash('error') });
+      res.render('checkout', { cart: items || [], messages: req.flash('success'), errors: req.flash('error') });
     });
   });
 });
-app.post('/checkout', checkAuthenticated, (req, res) => CheckoutController.checkout(req, res));
+app.post('/checkout', checkAuthenticated, safeHandler(CheckoutController, 'checkout'));
 
 /* Orders */
-app.get('/orders', checkAuthenticated, (req, res) => OrderController.viewOrders(req, res));
-app.get('/orders/:id', checkAuthenticated, (req, res) => OrderController.viewOrderDetails(req, res));
+app.get('/orders', checkAuthenticated, safeHandler(OrderController, 'viewOrders'));
+app.get('/orders/:id', checkAuthenticated, safeHandler(OrderController, 'viewOrderDetails'));
 
 /* Fallback / 404 */
 app.use((req, res) => {
-  res.status(404).render('index', { user: req.session.user, messages: [], errors: ['Page not found'] });
+  res.status(404).render('index', { messages: [], errors: ['Page not found'] });
 });
 
 /* -------------------------

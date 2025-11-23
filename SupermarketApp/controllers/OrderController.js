@@ -1,82 +1,13 @@
-// ...existing code...
+const fs = require('fs');
+const path = require('path');
+
 const Order = require('../models/Order');
 const OrderItem = require('../models/OrderItem');
-const Cart = require('../models/Cart');
+const viewsDir = path.join(__dirname, '..', 'views');
 
-const OrderController = {
-  // Checkout: create order from user's cart, add items, clear cart, then redirect
-  checkout(req, res) {
-    const user = req.session.user;
-    if (!user) {
-      req.flash('error', 'Please log in to checkout');
-      return res.redirect('/login');
-    }
-
-    Cart.getOrCreateCart(user.id, (err, cart) => {
-      if (err) {
-        req.flash('error', 'Unable to access cart');
-        return res.redirect('/cart');
-      }
-
-      Cart.getCartItems(cart.id, (err2, items) => {
-        if (err2) {
-          req.flash('error', 'Unable to retrieve cart items');
-          return res.redirect('/cart');
-        }
-
-        if (!items || items.length === 0) {
-          req.flash('error', 'Your cart is empty');
-          return res.redirect('/cart');
-        }
-
-        const totalAmount = items.reduce((sum, it) => sum + ((it.price || 0) * (it.quantity || 0)), 0);
-
-        Order.createOrder(user.id, totalAmount, (err3, order) => {
-          if (err3) {
-            req.flash('error', 'Failed to create order');
-            return res.redirect('/cart');
-          }
-
-          // Insert order items sequentially and then clear cart
-          let pending = items.length;
-          let hadError = false;
-
-          items.forEach((it) => {
-            OrderItem.create(order.id, it.product_id || it.productId || it.productId, it.quantity, it.price, (err4) => {
-              if (err4) {
-                hadError = true;
-                // Log and continue attempting to insert remaining items
-                console.error('Failed to add order item', err4);
-              }
-
-              pending -= 1;
-              if (pending === 0) {
-                if (hadError) {
-                  req.flash('error', 'Order was created but some items failed to save. Contact support.');
-                } else {
-                  req.flash('success', 'Order placed successfully');
-                }
-
-                // Clear cart items regardless (best-effort)
-                Cart.clear(cart.id, (errClear) => {
-                  if (errClear) {
-                    console.error('Failed to clear cart after checkout', errClear);
-                    req.flash('error', 'Order placed but failed to clear cart. Contact support.');
-                  }
-                  // Redirect to orders page (history)
-                  res.redirect('/orders');
-                });
-              }
-            });
-          });
-        });
-      });
-    });
-  },
-
-  // Show order history for logged-in user
-  viewOrders(req, res) {
-    const user = req.session.user;
+function viewOrders(req, res) {
+  try {
+    const user = req.session && req.session.user;
     if (!user) {
       req.flash('error', 'Please log in to view orders');
       return res.redirect('/login');
@@ -84,16 +15,37 @@ const OrderController = {
 
     Order.getOrdersByUser(user.id, (err, orders) => {
       if (err) {
-        req.flash('error', 'Unable to load orders');
+        console.error(`OrderController.viewOrders - failed for user ${user.id}:`, err);
+        req.flash('error', `Unable to load orders: ${err.message || 'server error'}`);
+
+        const fallbackView = fs.existsSync(path.join(viewsDir, 'orderHistory.ejs')) ? 'orderHistory' : null;
+        if (fallbackView) {
+          return res.render(fallbackView, { orders: [], messages: req.flash('success'), errors: req.flash('error') });
+        }
+
+        req.flash('error', 'Orders view not available');
         return res.redirect('/shopping');
       }
-      res.render('orders', { orders: orders || [], user, messages: req.flash('success'), errors: req.flash('error') });
-    });
-  },
 
-  // Show details for a specific order
-  viewOrderDetails(req, res) {
-    const user = req.session.user;
+      const viewName = fs.existsSync(path.join(viewsDir, 'orderHistory.ejs')) ? 'orderHistory' : null;
+      if (!viewName) {
+        console.error('OrderController.viewOrders - view "orderHistory.ejs" not found in views directory.');
+        req.flash('error', 'Orders view not found');
+        return res.redirect('/shopping');
+      }
+
+      return res.render(viewName, { orders: Array.isArray(orders) ? orders : [], messages: req.flash('success'), errors: req.flash('error') });
+    });
+  } catch (ex) {
+    console.error('OrderController.viewOrders - unexpected error', ex);
+    req.flash('error', 'Unexpected server error');
+    return res.redirect('/shopping');
+  }
+}
+
+function viewOrderDetails(req, res) {
+  try {
+    const user = req.session && req.session.user;
     if (!user) {
       req.flash('error', 'Please log in to view order details');
       return res.redirect('/login');
@@ -107,13 +59,32 @@ const OrderController = {
 
     Order.getOrderItems(orderId, (err, items) => {
       if (err) {
+        console.error('OrderController.viewOrderDetails - error fetching items for order', orderId, err);
         req.flash('error', 'Unable to load order items');
         return res.redirect('/orders');
       }
-      res.render('orderDetails', { orderId, items: items || [], user, messages: req.flash('success'), errors: req.flash('error') });
-    });
-  }
-};
 
-module.exports = OrderController;
-// ...existing code...
+      const detailViewPath = path.join(viewsDir, 'orderDetails.ejs');
+      const fallbackHistoryPath = path.join(viewsDir, 'orderHistory.ejs');
+
+      if (fs.existsSync(detailViewPath)) {
+        return res.render('orderDetails', { orderId, items: items || [], messages: req.flash('success'), errors: req.flash('error') });
+      }
+
+      if (fs.existsSync(fallbackHistoryPath)) {
+        req.flash('info', 'Order details view not available; showing order history instead.');
+        return res.render('orderHistory', { orders: [], messages: req.flash('success'), errors: req.flash('error'), items: items || [], orderId });
+      }
+
+      console.error('OrderController.viewOrderDetails - neither orderDetails.ejs nor orderHistory.ejs found in views directory.');
+      req.flash('error', 'Order details view not found');
+      return res.redirect('/orders');
+    });
+  } catch (ex) {
+    console.error('OrderController.viewOrderDetails - unexpected error', ex);
+    req.flash('error', 'Unexpected server error');
+    return res.redirect('/orders');
+  }
+}
+
+module.exports = { viewOrders, viewOrderDetails };

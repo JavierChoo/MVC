@@ -6,21 +6,18 @@ const ProductController = {
     Product.getAll((err, products) => {
       if (err) {
         req.flash('error', 'Unable to load products');
-        return res.status(500).render('inventory', { products: [], user: req.session.user, messages: req.flash('error') });
+        return res.status(500).render('inventory', { products: [], messages: req.flash('error'), errors: req.flash('error') });
       }
 
-      // Add isOutOfStock boolean for each product
       products = (products || []).map(p => ({
         ...p,
         isOutOfStock: (p.quantity <= 0)
       }));
 
-      const user = req.session.user || null;
-      if (user && user.role === 'admin') {
-        res.render('inventory', { products, user, messages: req.flash('success') });
-      } else {
-        res.render('shopping', { products, user, messages: req.flash('success') });
+      if (req.session.user && req.session.user.role === 'admin') {
+        return res.render('inventory', { products, messages: req.flash('success'), errors: req.flash('error') });
       }
+      return res.render('shopping', { products, messages: req.flash('success'), errors: req.flash('error') });
     });
   },
 
@@ -36,10 +33,8 @@ const ProductController = {
         return res.status(404).redirect('/shopping');
       }
 
-      // Add isOutOfStock boolean
       product.isOutOfStock = (product.quantity <= 0);
-
-      res.render('product', { product, user: req.session.user, messages: req.flash('success') });
+      return res.render('product', { product, messages: req.flash('success'), errors: req.flash('error') });
     });
   },
 
@@ -51,13 +46,13 @@ const ProductController = {
       image: req.body.image || null
     };
 
-    Product.create(product, (err, created) => {
+    Product.create(product, (err) => {
       if (err) {
         req.flash('error', 'Failed to add product');
         return res.status(500).redirect('/addProduct');
       }
       req.flash('success', 'Product added successfully');
-      res.redirect('/inventory');
+      return res.redirect('/inventory');
     });
   },
 
@@ -100,7 +95,7 @@ const ProductController = {
           return res.redirect('/inventory');
         }
         req.flash('success', 'Product updated successfully');
-        res.redirect('/inventory');
+        return res.redirect('/inventory');
       });
     });
   },
@@ -117,7 +112,7 @@ const ProductController = {
         return res.status(404).redirect('/inventory');
       }
       req.flash('success', 'Product deleted');
-      res.redirect('/inventory');
+      return res.redirect('/inventory');
     });
   }
 };

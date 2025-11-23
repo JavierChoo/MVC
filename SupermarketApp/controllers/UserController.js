@@ -2,93 +2,96 @@ const crypto = require('crypto');
 const User = require('../models/User');
 
 const UserController = {
+  // kept for compatibility — renders login form
+  showLogin(req, res) {
+    return res.render('login', { messages: req.flash('success'), errors: req.flash('error'), formData: req.flash('formData') });
+  },
+
+  // explicit name requested
   showLoginForm(req, res) {
-    res.render('login', { messages: req.flash('success'), errors: req.flash('error') });
+    return this.showLogin(req, res);
   },
 
-  showRegisterForm(req, res) {
-    res.render('register', { messages: req.flash('error'), formData: req.flash('formData')[0] });
-  },
-
+  // Login using email + password (SHA1)
   loginUser(req, res) {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
     if (!email || !password) {
       req.flash('error', 'Email and password are required');
+      req.flash('formData', { email });
       return res.redirect('/login');
     }
 
     User.findUserByEmail(email, (err, user) => {
       if (err) {
+        console.error('Error finding user by email:', err);
         req.flash('error', 'Server error');
+        req.flash('formData', { email });
         return res.redirect('/login');
       }
+
       if (!user) {
-        req.flash('error', 'Invalid email or password');
+        req.flash('error', 'Invalid credentials');
+        req.flash('formData', { email });
         return res.redirect('/login');
       }
 
-      const hashed = crypto.createHash('sha1').update(password).digest('hex');
-      if (user.password !== hashed) {
-        req.flash('error', 'Invalid email or password');
+      const hashed = crypto.createHash('sha1').update(String(password)).digest('hex');
+      const stored = user.password || user.passwordHash || user.pass || '';
+
+      if (hashed !== String(stored)) {
+        req.flash('error', 'Invalid credentials');
+        req.flash('formData', { email });
         return res.redirect('/login');
       }
 
-      // Remove password before storing in session
-      delete user.password;
-      req.session.user = user;
-      req.flash('success', 'Login successful');
+      // Save session user without password
+      req.session.user = {
+        id: user.id,
+        username: user.username || user.name || user.email,
+        role: user.role || 'user',
+        email: user.email
+      };
 
-      if (user.role === 'admin') return res.redirect('/inventory');
+      req.flash('success', 'Logged in');
+
+      if (req.session.user.role === 'admin') {
+        return res.redirect('/inventory');
+      }
       return res.redirect('/shopping');
     });
   },
 
+  showRegister(req, res) {
+    return res.render('register', { messages: req.flash('success'), errors: req.flash('error'), formData: req.flash('formData') });
+  },
+
   registerUser(req, res) {
-    const { username, email, password, address, contact, role } = req.body;
-
-    // Basic validation
-    if (!username || !email || !password || !address || !contact || !role) {
-      req.flash('error', 'All fields are required');
-      req.flash('formData', req.body);
-      return res.redirect('/register');
-    }
-    if (password.length < 6) {
-      req.flash('error', 'Password must be at least 6 characters');
-      req.flash('formData', req.body);
-      return res.redirect('/register');
-    }
-
-    User.findUserByEmail(email, (err, existing) => {
+    const userData = req.body;
+    User.create(userData, (err) => {
       if (err) {
-        req.flash('error', 'Server error');
-        req.flash('formData', req.body);
+        console.error('Registration error:', err);
+        req.flash('error', 'Registration failed');
+        req.flash('formData', userData);
         return res.redirect('/register');
       }
-      if (existing) {
-        req.flash('error', 'Email already in use');
-        req.flash('formData', req.body);
-        return res.redirect('/register');
-      }
-
-      const hashed = crypto.createHash('sha1').update(password).digest('hex');
-      const newUser = { username, email, password: hashed, address, contact, role };
-
-      User.createUser(newUser, (err, created) => {
-        if (err) {
-          req.flash('error', 'Failed to create user');
-          req.flash('formData', req.body);
-          return res.redirect('/register');
-        }
-        req.flash('success', 'Registration successful. Please log in.');
-        res.redirect('/login');
-      });
+      req.flash('success', 'Registration successful, please login');
+      return res.redirect('/login');
     });
   },
 
   logoutUser(req, res) {
-    req.session.destroy(() => {
-      res.redirect('/login');
+    req.session.destroy(err => {
+      if (err) console.error('Logout error', err);
+      return res.redirect('/');
     });
+  },
+
+  profile(req, res) {
+    if (!req.session.user) {
+      req.flash('error', 'Please log in to view your profile');
+      return res.redirect('/login');
+    }
+    return res.render('profile', { messages: req.flash('success'), errors: req.flash('error') });
   }
 };
 

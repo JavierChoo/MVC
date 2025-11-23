@@ -13,6 +13,30 @@
   <%- include("partials/navbar", { user: user }) %>
 
   <div class="container py-4">
+
+    <!-- Flash messages (placed below navbar) -->
+    <% if ((errors && errors.length) || (messages && messages.length)) { %>
+      <div class="mb-3">
+        <% if (errors && errors.length) { %>
+          <% errors.forEach(function(errMsg){ %>
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+              <%= errMsg %>
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          <% }) %>
+        <% } %>
+
+        <% if (messages && messages.length) { %>
+          <% messages.forEach(function(msg){ %>
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+              <%= msg %>
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          <% }) %>
+        <% } %>
+      </div>
+    <% } %>
+
     <p>Welcome, <%= user.username %> (<%= user.role %>)</p>
 
     <div class="text-center mb-4">

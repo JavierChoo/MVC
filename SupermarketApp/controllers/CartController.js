@@ -1,4 +1,3 @@
-// ...existing code...
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 
@@ -14,7 +13,6 @@ const CartController = {
     const quantity = parseInt(req.body.quantity, 10) || 1;
     const redirectTo = req.body.redirectTo === 'cart' ? '/cart' : '/shopping';
 
-    // Check product quantity before adding to cart
     Product.getById(productId, (err, product) => {
       if (err || !product) {
         req.flash('error', 'Product not found');
@@ -37,7 +35,7 @@ const CartController = {
             return res.redirect(redirectTo);
           }
           req.flash('success', 'Item added to cart');
-          res.redirect(redirectTo);
+          return res.redirect(redirectTo);
         });
       });
     });
@@ -61,7 +59,7 @@ const CartController = {
           req.flash('error', 'Unable to load cart items');
           return res.redirect('/shopping');
         }
-        res.render('cart', { cart: items || [], user, messages: req.flash('success'), errors: req.flash('error') });
+        return res.render('cart', { cart: items || [], messages: req.flash('success'), errors: req.flash('error') });
       });
     });
   },
@@ -85,7 +83,7 @@ const CartController = {
         return res.redirect('/cart');
       }
       req.flash('success', 'Cart updated');
-      res.redirect('/cart');
+      return res.redirect('/cart');
     });
   },
 
@@ -108,11 +106,10 @@ const CartController = {
           return res.redirect('/cart');
         }
         req.flash('success', 'Cart cleared');
-        res.redirect('/cart');
+        return res.redirect('/cart');
       });
     });
   }
 };
 
 module.exports = CartController;
-// ...existing code...
