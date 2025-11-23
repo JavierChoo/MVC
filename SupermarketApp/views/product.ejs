@@ -39,6 +39,7 @@
                 const imgSrc = product.image
                   ? (typeof product.image === 'string' && product.image.startsWith('/') ? product.image : '/images/' + product.image)
                   : '/images/default.png';
+                const outOfStock = product.isOutOfStock || product.quantity === 0;
               %>
               <img src="<%= imgSrc %>" alt="<%= product.productName %>" class="img-fluid rounded w-100" style="object-fit:cover; max-height:420px;">
             </div>
@@ -46,7 +47,17 @@
             <div class="col-12 col-md-7">
               <h3 class="mb-2"><%= product.productName %></h3>
               <p class="text-muted mb-2">Price: <span class="fw-semibold">$<%= (product.price || 0).toFixed(2) %></span></p>
-              <p class="mb-3">Available: <strong><%= product.quantity != null ? product.quantity : '—' %></strong></p>
+              <p class="mb-2">
+                Available: <%= product.quantity %>
+                <% if (outOfStock) { %>
+                  <span class="badge bg-danger ms-2">Out of Stock</span>
+                <% } %>
+              </p>
+              <% if (outOfStock) { %>
+                <div class="alert alert-warning py-2 px-3 mb-3">
+                  This product is currently out of stock and cannot be added to your cart.
+                </div>
+              <% } %>
 
               <% if (user && user.role === 'admin') { %>
                 <div class="d-flex gap-2">
@@ -58,7 +69,7 @@
                 <form action="/add-to-cart/<%= product.id %>" method="POST" class="row g-2 align-items-center">
                   <div class="col-auto">
                     <label for="quantity" class="visually-hidden">Quantity</label>
-                    <select id="quantity" name="quantity" class="form-select form-select-sm" style="min-width:90px;">
+                    <select id="quantity" name="quantity" class="form-select form-select-sm" style="min-width:90px;" <%= outOfStock ? 'disabled' : '' %>>
                       <% for (let q = 1; q <= Math.min(10, product.quantity || 10); q++) { %>
                         <option value="<%= q %>"><%= q %></option>
                       <% } %>
@@ -66,7 +77,11 @@
                   </div>
 
                   <div class="col-auto">
-                    <button type="submit" class="btn btn-primary">Add to Cart</button>
+                    <% if (outOfStock) { %>
+                      <button type="button" class="btn btn-secondary" disabled>Out of Stock</button>
+                    <% } else { %>
+                      <button type="submit" class="btn btn-primary">Add to Cart</button>
+                    <% } %>
                   </div>
 
                   <div class="col-12 mt-3">

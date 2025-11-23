@@ -130,7 +130,7 @@ app.post(
   '/updateProduct/:id',
   checkAuthenticated,
   checkAdmin,
-  upload.single('image'),
+  upload.single('image'),      // multer will not error when no file is present
   validateProduct,
   (req, res) => ProductController.update(req, res)
 );

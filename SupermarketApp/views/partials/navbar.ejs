@@ -6,14 +6,14 @@
     </button>
 
     <div class="collapse navbar-collapse" id="mainNavbar">
-      <ul class="navbar-nav me-auto mb-2 mb-sm-0">
-        <li class="nav-item">
-          <a class="nav-link" href="/shopping">Shop</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="/cart">Cart</a>
-        </li>
-        <% if (user) { %>
+      <% if (user) { %>
+        <ul class="navbar-nav me-auto mb-2 mb-sm-0">
+          <li class="nav-item">
+            <a class="nav-link" href="/shopping">Shop</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/cart">Cart</a>
+          </li>
           <li class="nav-item">
             <a class="nav-link" href="/orders">Orders</a>
           </li>
@@ -22,12 +22,14 @@
               <a class="nav-link" href="/inventory">Inventory</a>
             </li>
           <% } %>
-        <% } %>
-      </ul>
+        </ul>
+      <% } else { %>
+        <div class="me-auto"></div>
+      <% } %>
 
       <div class="d-flex align-items-center">
         <% if (user) { %>
-          <div class="me-3 text-light">
+          <div class="me-3 text-light d-none d-sm-block">
             <strong><%= user.username %></strong>
             <small class="text-muted">(<%= user.role %>)</small>
           </div>

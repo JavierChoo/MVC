@@ -10,7 +10,7 @@
 
   <%- include("partials/navbar", { user: user }) %>
 
-  <div class="container py-4">
+  <main class="container py-4">
     <% if (errors && errors.length) { %>
       <div class="alert alert-danger">
         <% errors.forEach(function(e){ %><div><%= e %></div><% }) %>
@@ -58,6 +58,7 @@
                      const imgSrc = product.image
                        ? (typeof product.image === 'string' && product.image.startsWith('/') ? product.image : '/images/' + product.image)
                        : '/images/default.png';
+                     const outOfStock = product.isOutOfStock || product.quantity === 0;
                 %>
                   <tr>
                     <td>
@@ -67,7 +68,14 @@
                       <a href="/product/<%= product.id %>" class="text-decoration-none"><strong><%= product.productName %></strong></a>
                     </td>
                     <td>$<%= (product.price || 0).toFixed(2) %></td>
-                    <td><%= product.quantity != null ? product.quantity : '-' %></td>
+                    <td>
+                      <% if (outOfStock) { %>
+                        <span class="text-danger fw-bold"><%= product.quantity %></span>
+                        <span class="badge bg-danger ms-1">Out of Stock</span>
+                      <% } else { %>
+                        <%= product.quantity %>
+                      <% } %>
+                    </td>
                     <td class="text-end">
                       <a href="/updateProduct/<%= product.id %>" class="btn btn-sm btn-warning me-2">Edit</a>
                       <a href="/deleteProduct/<%= product.id %>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this product?')">Delete</a>
@@ -80,7 +88,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </main>
 
   <%- include("partials/footer") %>
 

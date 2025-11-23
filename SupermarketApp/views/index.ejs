@@ -15,33 +15,28 @@
       <div class="col-12 col-md-10 col-lg-8">
         <div class="card shadow-sm">
           <div class="card-body text-center">
-            <% if (user) { %>
-              <h2 class="card-title">Welcome back, <%= user.username %>!</h2>
-              <p class="text-muted mb-4">You are signed in as <strong><%= user.role %></strong>.</p>
+            <% if (!user) { %>
+              <h2 class="card-title mb-3">Welcome to Supermarket App</h2>
+              <p class="text-muted mb-4">Please sign in or create an account to start shopping.</p>
+
+              <div class="d-flex flex-column flex-sm-row justify-content-center gap-2">
+                <a href="/login" class="btn btn-primary btn-lg">Login</a>
+                <a href="/register" class="btn btn-outline-primary btn-lg">Register</a>
+              </div>
             <% } else { %>
-              <h2 class="card-title">Welcome to Supermarket App</h2>
-              <p class="text-muted mb-4">Sign in or register to start shopping.</p>
+              <h2 class="card-title mb-2">Welcome back, <%= user.username %>!</h2>
+              <p class="text-muted mb-4">You are signed in as <strong><%= user.role %></strong>.</p>
+
+              <div class="d-flex flex-column flex-sm-row justify-content-center gap-2">
+                <a href="/shopping" class="btn btn-primary btn-lg">Shop</a>
+                <a href="/cart" class="btn btn-outline-primary btn-lg">Cart</a>
+
+                <% if (user.role === 'admin') { %>
+                  <a href="/inventory" class="btn btn-warning btn-lg">Inventory</a>
+                <% } %>
+              </div>
             <% } %>
-
-            <div class="d-flex flex-column flex-sm-row justify-content-center gap-2">
-              <a href="/shopping" class="btn btn-primary btn-lg">Shop</a>
-              <a href="/cart" class="btn btn-outline-primary btn-lg">Cart</a>
-
-              <% if (!user) { %>
-                <a href="/login" class="btn btn-secondary btn-lg">Login</a>
-                <a href="/register" class="btn btn-outline-secondary btn-lg">Register</a>
-              <% } else if (user.role === 'admin') { %>
-                <a href="/inventory" class="btn btn-warning btn-lg">Inventory</a>
-                <a href="/logout" class="btn btn-outline-dark btn-lg">Logout</a>
-              <% } else { %>
-                <a href="/logout" class="btn btn-outline-dark btn-lg">Logout</a>
-              <% } %>
-            </div>
           </div>
-        </div>
-
-        <div class="mt-4 text-center text-muted">
-          <small>Quick links: Browse products, manage your cart, and view orders.</small>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 // ...existing code...
 const Cart = require('../models/Cart');
+const Product = require('../models/Product');
 
 const CartController = {
   addToCart(req, res) {
@@ -13,19 +14,31 @@ const CartController = {
     const quantity = parseInt(req.body.quantity, 10) || 1;
     const redirectTo = req.body.redirectTo === 'cart' ? '/cart' : '/shopping';
 
-    Cart.getOrCreateCart(user.id, (err, cart) => {
-      if (err) {
-        req.flash('error', 'Unable to access cart');
+    // Check product quantity before adding to cart
+    Product.getById(productId, (err, product) => {
+      if (err || !product) {
+        req.flash('error', 'Product not found');
+        return res.redirect(redirectTo);
+      }
+      if (product.quantity <= 0) {
+        req.flash('error', 'Product is out of stock');
         return res.redirect(redirectTo);
       }
 
-      Cart.addItem(cart.id, productId, quantity, (err2) => {
-        if (err2) {
-          req.flash('error', 'Failed to add item to cart');
+      Cart.getOrCreateCart(user.id, (err, cart) => {
+        if (err) {
+          req.flash('error', 'Unable to access cart');
           return res.redirect(redirectTo);
         }
-        req.flash('success', 'Item added to cart');
-        res.redirect(redirectTo);
+
+        Cart.addItem(cart.id, productId, quantity, (err2) => {
+          if (err2) {
+            req.flash('error', 'Failed to add item to cart');
+            return res.redirect(redirectTo);
+          }
+          req.flash('success', 'Item added to cart');
+          res.redirect(redirectTo);
+        });
       });
     });
   },

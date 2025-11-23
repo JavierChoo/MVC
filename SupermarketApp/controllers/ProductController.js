@@ -9,7 +9,12 @@ const ProductController = {
         return res.status(500).render('inventory', { products: [], user: req.session.user, messages: req.flash('error') });
       }
 
-      // Render inventory for admins, shopping for regular users
+      // Add isOutOfStock boolean for each product
+      products = (products || []).map(p => ({
+        ...p,
+        isOutOfStock: (p.quantity <= 0)
+      }));
+
       const user = req.session.user || null;
       if (user && user.role === 'admin') {
         res.render('inventory', { products, user, messages: req.flash('success') });
@@ -31,7 +36,9 @@ const ProductController = {
         return res.status(404).redirect('/shopping');
       }
 
-      // If admin viewing a single product page you might want edit view; default to product view
+      // Add isOutOfStock boolean
+      product.isOutOfStock = (product.quantity <= 0);
+
       res.render('product', { product, user: req.session.user, messages: req.flash('success') });
     });
   },
@@ -56,24 +63,45 @@ const ProductController = {
 
   update(req, res) {
     const id = parseInt(req.params.id, 10);
-    const product = {
-      productName: req.body.productName,
-      quantity: req.body.quantity != null ? Number(req.body.quantity) : null,
-      price: req.body.price != null ? Number(req.body.price) : null,
-      image: req.body.image || null
-    };
+    if (Number.isNaN(id)) {
+      req.flash('error', 'Invalid product id');
+      return res.redirect('/inventory');
+    }
 
-    Product.update(id, product, (err, result) => {
+    Product.getById(id, (err, existing) => {
       if (err) {
-        req.flash('error', 'Failed to update product');
-        return res.status(500).redirect(`/updateProduct/${id}`);
+        console.error('Error fetching product:', err);
+        req.flash('error', 'Server error');
+        return res.redirect('/inventory');
       }
-      if (result && result.affectedRows === 0) {
+      if (!existing) {
         req.flash('error', 'Product not found');
-        return res.status(404).redirect('/inventory');
+        return res.redirect('/inventory');
       }
-      req.flash('success', 'Product updated');
-      res.redirect('/inventory');
+
+      let imagePath = existing.image || null;
+      if (req.file && req.file.filename) {
+        imagePath = '/images/' + req.file.filename;
+      } else if (req.body && req.body.currentImage) {
+        imagePath = req.body.currentImage || imagePath;
+      }
+
+      const updatedProduct = {
+        productName: req.body.name || req.body.productName || existing.productName,
+        price: req.body.price != null ? Number(req.body.price) : existing.price,
+        quantity: req.body.quantity != null ? Number(req.body.quantity) : existing.quantity,
+        image: imagePath
+      };
+
+      Product.update(id, updatedProduct, (err2) => {
+        if (err2) {
+          console.error('Error updating product:', err2);
+          req.flash('error', 'Failed to update product');
+          return res.redirect('/inventory');
+        }
+        req.flash('success', 'Product updated successfully');
+        res.redirect('/inventory');
+      });
     });
   },
 

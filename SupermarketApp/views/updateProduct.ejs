@@ -10,84 +10,84 @@
 
   <%- include("partials/navbar", { user: user }) %>
 
-  <div class="container py-4">
-    <% if (errors && errors.length) { %>
-      <div class="alert alert-danger">
-        <% errors.forEach(function(e){ %><div><%= e %></div><% }) %>
-      </div>
-    <% } %>
+<main class="container py-4">
+  <% if (errors && errors.length) { %>
+    <div class="alert alert-danger">
+      <% errors.forEach(function(e){ %><div><%= e %></div><% }) %>
+    </div>
+  <% } %>
 
-    <% if (messages && messages.length) { %>
-      <div class="alert alert-success">
-        <% messages.forEach(function(m){ %><div><%= m %></div><% }) %>
-      </div>
-    <% } %>
+  <% if (messages && messages.length) { %>
+    <div class="alert alert-success">
+      <% messages.forEach(function(m){ %><div><%= m %></div><% }) %>
+    </div>
+  <% } %>
 
-    <div class="card shadow-sm mx-auto" style="max-width:900px;">
-      <div class="card-header">
-        <h5 class="mb-0">Update Product</h5>
-      </div>
-      <div class="card-body">
-        <% if (!product) { %>
-          <div class="text-center py-5">
-            <p class="mb-3">Product not found.</p>
-            <a href="/inventory" class="btn btn-secondary">Back to Inventory</a>
-          </div>
-        <% } else { %>
-          <form action="/updateProduct/<%= product.id %>" method="POST" enctype="multipart/form-data">
-            <div class="row g-4">
-              <div class="col-12 col-md-4">
-                <% 
-                  const imgSrc = product.image 
-                    ? (typeof product.image === 'string' && product.image.startsWith('/') ? product.image : '/images/' + product.image) 
-                    : '/images/default.png';
-                %>
-                <div class="mb-3 text-center">
-                  <img src="<%= imgSrc %>" alt="<%= product.productName %>" class="img-fluid rounded" style="max-height:300px; object-fit:cover;">
+  <div class="card shadow-sm mx-auto" style="max-width:900px;">
+    <div class="card-header">
+      <h5 class="mb-0">Update Product</h5>
+    </div>
+    <div class="card-body">
+      <% if (!product) { %>
+        <div class="text-center py-5">
+          <p class="mb-3">Product not found.</p>
+          <a href="/inventory" class="btn btn-secondary">Back to Inventory</a>
+        </div>
+      <% } else { %>
+        <form action="/updateProduct/<%= product.id %>" method="POST" enctype="multipart/form-data">
+          <div class="row g-4">
+            <div class="col-12 col-md-4">
+              <% 
+                const imgSrc = product.image 
+                  ? (typeof product.image === 'string' && product.image.startsWith('/') ? product.image : '/images/' + product.image) 
+                  : '/images/default.png';
+              %>
+              <div class="mb-3 text-center">
+                <img src="<%= imgSrc %>" alt="<%= product.productName %>" class="img-fluid rounded" style="max-height:300px; object-fit:cover;">
+              </div>
+
+              <div class="mb-3">
+                <label for="image" class="form-label">Replace Image</label>
+                <input class="form-control" type="file" id="image" name="image" accept="image/*">
+              </div>
+
+              <div class="mb-2">
+                <label class="form-label small">Current image path</label>
+                <input type="text" class="form-control form-control-sm" name="currentImage" value="<%= product.image || '' %>" readonly>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-8">
+              <div class="mb-3">
+                <label for="name" class="form-label">Product Name</label>
+                <input type="text" id="name" name="name" class="form-control" required value="<%= product.productName %>">
+              </div>
+
+              <div class="row g-3">
+                <div class="col-12 col-md-6">
+                  <label for="price" class="form-label">Price ($)</label>
+                  <input type="number" id="price" name="price" step="0.01" min="0" class="form-control" required value="<%= product.price %>">
                 </div>
 
-                <div class="mb-3">
-                  <label for="image" class="form-label">Replace Image</label>
-                  <input class="form-control" type="file" id="image" name="image" accept="image/*">
-                </div>
-
-                <div class="mb-2">
-                  <label class="form-label small">Current image path</label>
-                  <input type="text" class="form-control form-control-sm" name="currentImage" value="<%= product.image || '' %>" readonly>
+                <div class="col-12 col-md-6">
+                  <label for="quantity" class="form-label">Quantity</label>
+                  <input type="number" id="quantity" name="quantity" step="1" min="0" class="form-control" required value="<%= product.quantity %>">
                 </div>
               </div>
 
-              <div class="col-12 col-md-8">
-                <div class="mb-3">
-                  <label for="name" class="form-label">Product Name</label>
-                  <input type="text" id="name" name="name" class="form-control" required value="<%= product.productName %>">
-                </div>
-
-                <div class="row g-3">
-                  <div class="col-12 col-md-6">
-                    <label for="price" class="form-label">Price ($)</label>
-                    <input type="number" id="price" name="price" step="0.01" min="0" class="form-control" required value="<%= product.price %>">
-                  </div>
-
-                  <div class="col-12 col-md-6">
-                    <label for="quantity" class="form-label">Quantity</label>
-                    <input type="number" id="quantity" name="quantity" step="1" min="0" class="form-control" required value="<%= product.quantity %>">
-                  </div>
-                </div>
-
-                <div class="mt-4 d-flex justify-content-between">
-                  <a href="/inventory" class="btn btn-outline-secondary">Back to Inventory</a>
-                  <div>
-                    <button type="submit" class="btn btn-primary">Update Product</button>
-                  </div>
+              <div class="mt-4 d-flex justify-content-between">
+                <a href="/inventory" class="btn btn-outline-secondary">Back to Inventory</a>
+                <div>
+                  <button type="submit" class="btn btn-primary">Update Product</button>
                 </div>
               </div>
             </div>
-          </form>
-        <% } %>
-      </div>
+          </div>
+        </form>
+      <% } %>
     </div>
   </div>
+</main>
 
   <%- include("partials/footer") %>
 
