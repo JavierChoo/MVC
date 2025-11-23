@@ -3,245 +3,183 @@ const session = require('express-session');
 const flash = require('connect-flash');
 const multer = require('multer');
 const path = require('path');
+
+const ProductController = require('./controllers/ProductController');
+const UserController = require('./controllers/UserController');
+const CartController = require('./controllers/CartController');
+const OrderController = require('./controllers/OrderController');
+const CheckoutController = require('./controllers/CheckoutController');
+
+const { checkAuthenticated, checkAdmin } = require('./middleware/auth');
+const { validateRegistration, validateProduct } = require('./middleware/validation');
+
 const app = express();
 
-const ProductController = require('./controllers/ProductController'); // per request
-const Product = require('./models/Product'); // used for session-cart lookups
-
-// Set up multer for file uploads
+/* -------------------------
+   Multer (image uploads)
+   ------------------------- */
+const imagesDir = path.join(__dirname, 'public', 'images');
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, 'public', 'images')); // Directory to save uploaded files
-    },
-    filename: (req, file, cb) => {
-        // keep original name but prefix with timestamp to avoid collisions
-        cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '-'));
-    }
+  destination: (req, file, cb) => cb(null, imagesDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const name = `image-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, name);
+  }
 });
-const upload = multer({ storage: storage });
+const fileFilter = (req, file, cb) => {
+  const allowed = /jpeg|jpg|png/;
+  const ext = path.extname(file.originalname).toLowerCase();
+  const mime = (file.mimetype || '').toLowerCase();
+  if (allowed.test(ext) && (mime === 'image/jpeg' || mime === 'image/jpg' || mime === 'image/png')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files (jpg, jpeg, png) are allowed'));
+  }
+};
+const upload = multer({ storage, fileFilter });
 
-// Set up view engine
+/* -------------------------
+   Express / view settings
+   ------------------------- */
 app.set('view engine', 'ejs');
-//  enable static files
-app.use(express.static('public'));
-// enable form processing
-app.use(express.urlencoded({
-    extended: false
-}));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-// Session & flash
+/* -------------------------
+   Session & flash
+   ------------------------- */
 app.use(session({
-    secret: 'secret',
-    resave: false,
-    saveUninitialized: true,
-    // Session expires after 1 week of inactivity
-    cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 } 
+  secret: process.env.SESSION_SECRET || 'secret',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 } // 1 week
 }));
 app.use(flash());
 
-// Middleware to check if user is logged in
-const checkAuthenticated = (req, res, next) => {
-    if (req.session.user) {
-        return next();
-    } else {
-        req.flash('error', 'Please log in to view this resource');
-        res.redirect('/login');
-    }
-};
-
-// Middleware to check if user is admin
-const checkAdmin = (req, res, next) => {
-    if (req.session.user && req.session.user.role === 'admin') {
-        return next();
-    } else {
-        req.flash('error', 'Access denied');
-        res.redirect('/shopping');
-    }
-};
-
-// Middleware for form validation
-const validateRegistration = (req, res, next) => {
-    const { username, email, password, address, contact, role } = req.body;
-
-    if (!username || !email || !password || !address || !contact || !role) {
-        return res.status(400).send('All fields are required.');
-    }
-    
-    if (password.length < 6) {
-        req.flash('error', 'Password should be at least 6 or more characters long');
-        req.flash('formData', req.body);
-        return res.redirect('/register');
-    }
-    next();
-};
-
-// Define routes
-app.get('/',  (req, res) => {
-    res.render('index', {user: req.session.user} );
+/* -------------------------
+   Make flash & user available in all views
+   ------------------------- */
+app.use((req, res, next) => {
+  res.locals.user = req.session.user || null;
+  res.locals.messages = req.flash('success');
+  res.locals.errors = req.flash('error');
+  next();
 });
 
-// Inventory - delegate to controller (controller should handle rendering/redirecting)
-app.get('/inventory', checkAuthenticated, checkAdmin, (req, res) => {
-    ProductController.list(req, res);
+/* -------------------------
+   Routes (MVC delegates)
+   ------------------------- */
+
+/* Home */
+app.get('/', (req, res) => {
+  res.render('index', { user: req.session.user });
 });
 
-app.get('/register', (req, res) => {
-    res.render('register', { messages: req.flash('error'), formData: req.flash('formData')[0] });
-});
+/* User auth */
+app.get('/register', UserController.showRegisterForm);
+app.post('/register', validateRegistration, UserController.registerUser);
 
-app.post('/register', validateRegistration, (req, res) => {
-    const { username, email, password, address, contact, role } = req.body;
+app.get('/login', UserController.showLoginForm);
+app.post('/login', UserController.loginUser);
 
-    // keep registration logic here (not product-related)
-    const db = require('./db');
-    const sql = 'INSERT INTO users (username, email, password, address, contact, role) VALUES (?, ?, SHA1(?), ?, ?, ?)';
-    db.query(sql, [username, email, password, address, contact, role], (err, result) => {
-        if (err) {
-            throw err;
-        }
-        req.flash('success', 'Registration successful! Please log in.');
-        res.redirect('/login');
-    });
-});
+app.get('/logout', UserController.logoutUser);
 
-app.get('/login', (req, res) => {
-    res.render('login', { messages: req.flash('success'), errors: req.flash('error') });
-});
+/* Products / Inventory */
+app.get('/inventory', checkAuthenticated, checkAdmin, ProductController.list);
+app.get('/shopping', checkAuthenticated, ProductController.list);
 
-app.post('/login', (req, res) => {
-    const { email, password } = req.body;
+/* Single product view */
+app.get('/product/:id', checkAuthenticated, ProductController.getById);
 
-    // Validate email and password
-    if (!email || !password) {
-        req.flash('error', 'All fields are required.');
-        return res.redirect('/login');
-    }
-
-    const db = require('./db');
-    const sql = 'SELECT * FROM users WHERE email = ? AND password = SHA1(?)';
-    db.query(sql, [email, password], (err, results) => {
-        if (err) {
-            throw err;
-        }
-
-        if (results.length > 0) {
-            // Successful login
-            req.session.user = results[0]; 
-            req.flash('success', 'Login successful!');
-            if(req.session.user.role == 'user')
-                res.redirect('/shopping');
-            else
-                res.redirect('/inventory');
-        } else {
-            // Invalid credentials
-            req.flash('error', 'Invalid email or password.');
-            res.redirect('/login');
-        }
-    });
-});
-
-// Shopping - use controller to list products (controller should render shopping view)
-app.get('/shopping', checkAuthenticated, (req, res) => {
-    ProductController.list(req, res);
-});
-
-// Add to cart uses model to fetch single product and store in session cart
-app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => {
-    const productId = parseInt(req.params.id, 10);
-    const quantity = parseInt(req.body.quantity, 10) || 1;
-
-    Product.getById(productId, (err, product) => {
-        if (err) return res.status(500).send('Server error');
-        if (!product) return res.status(404).send('Product not found');
-
-        if (!req.session.cart) req.session.cart = [];
-
-        const existingItem = req.session.cart.find(item => item.productId === productId);
-        if (existingItem) {
-            existingItem.quantity += quantity;
-        } else {
-            req.session.cart.push({
-                productId: productId,
-                productName: product.productName,
-                price: product.price,
-                quantity: quantity,
-                image: product.image
-            });
-        }
-
-        res.redirect('/cart');
-    });
-});
-
-app.get('/cart', checkAuthenticated, (req, res) => {
-    const cart = req.session.cart || [];
-    res.render('cart', { cart, user: req.session.user });
-});
-
-app.get('/logout', (req, res) => {
-    req.session.destroy();
-    res.redirect('/');
-});
-
-app.get('/product/:id', checkAuthenticated, (req, res) => {
-    // delegate to controller to show single product (controller should render product view)
-    ProductController.getById(req, res);
-});
-
+/* Add product form (render) */
 app.get('/addProduct', checkAuthenticated, checkAdmin, (req, res) => {
-    res.render('addProduct', {user: req.session.user } ); 
+  res.render('addProduct', { user: req.session.user, formData: req.flash('formData')[0] });
 });
 
-// Add product - handle file upload then delegate to controller.create
-app.post('/addProduct', upload.single('image'),  (req, res) => {
-    // normalize form field names expected by controller/model
-    req.body.productName = req.body.name;
-    req.body.quantity = req.body.quantity ? Number(req.body.quantity) : null;
-    req.body.price = req.body.price ? Number(req.body.price) : null;
-    if (req.file) {
-        req.body.image = '/images/' + req.file.filename;
-    } else {
-        req.body.image = req.body.image || null;
-    }
+/* Create product */
+app.post(
+  '/addProduct',
+  checkAuthenticated,
+  checkAdmin,
+  upload.single('image'),
+  validateProduct,
+  (req, res) => ProductController.create(req, res)
+);
 
-    ProductController.create(req, res);
-});
-
-// Render update product form - fetch product via model and render (keeps existing behavior)
+/* Render update product form */
 app.get('/updateProduct/:id', checkAuthenticated, checkAdmin, (req, res) => {
-    const productId = parseInt(req.params.id, 10);
-    Product.getById(productId, (err, product) => {
-        if (err) return res.status(500).send('Server error');
-        if (!product) return res.status(404).send('Product not found');
-        res.render('updateProduct', { product, user: req.session.user });
-    });
-});
-
-// Update product - handle file upload and delegate to controller.update
-app.post('/updateProduct/:id', upload.single('image'), (req, res) => {
-    const productId = req.params.id;
-    req.body.productName = req.body.name;
-    req.body.quantity = req.body.quantity ? Number(req.body.quantity) : null;
-    req.body.price = req.body.price ? Number(req.body.price) : null;
-
-    // preserve current image if no new file uploaded
-    if (req.file) {
-        req.body.image = '/images/' + req.file.filename;
-    } else {
-        req.body.image = req.body.currentImage || null;
+  const id = parseInt(req.params.id, 10);
+  const Product = require('./models/Product');
+  Product.getById(id, (err, product) => {
+    if (err) {
+      req.flash('error', 'Server error');
+      return res.redirect('/inventory');
     }
-
-    // ensure req.params.id is available to controller
-    req.params.id = productId;
-    ProductController.update(req, res);
+    if (!product) {
+      req.flash('error', 'Product not found');
+      return res.redirect('/inventory');
+    }
+    res.render('updateProduct', { product, user: req.session.user });
+  });
 });
 
-// Delete product - delegate to controller.delete (controller should redirect)
+/* Update product */
+app.post(
+  '/updateProduct/:id',
+  checkAuthenticated,
+  checkAdmin,
+  upload.single('image'),
+  validateProduct,
+  (req, res) => ProductController.update(req, res)
+);
+
+/* Delete product */
 app.get('/deleteProduct/:id', checkAuthenticated, checkAdmin, (req, res) => {
-    // Prefer controller to handle deletion and redirecting
-    ProductController.delete(req, res);
+  ProductController.delete(req, res);
 });
 
+/* Cart (persistent cart via CartController) */
+app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => CartController.addToCart(req, res));
+app.get('/cart', checkAuthenticated, (req, res) => CartController.viewCart(req, res));
+app.post('/cart/update/:id', checkAuthenticated, (req, res) => CartController.updateCartItem(req, res));
+app.post('/cart/clear', checkAuthenticated, (req, res) => CartController.clearCart(req, res));
+
+/* Checkout */
+app.get('/checkout', checkAuthenticated, (req, res) => {
+  // render confirmation page using cart items (controller could be extended)
+  const Cart = require('./models/Cart');
+  const user = req.session.user;
+  Cart.getOrCreateCart(user.id, (err, cart) => {
+    if (err) {
+      req.flash('error', 'Unable to load cart');
+      return res.redirect('/cart');
+    }
+    Cart.getCartItems(cart.id, (err2, items) => {
+      if (err2) {
+        req.flash('error', 'Unable to load cart');
+        return res.redirect('/cart');
+      }
+      res.render('checkout', { cart: items || [], user, messages: req.flash('success'), errors: req.flash('error') });
+    });
+  });
+});
+app.post('/checkout', checkAuthenticated, (req, res) => CheckoutController.checkout(req, res));
+
+/* Orders */
+app.get('/orders', checkAuthenticated, (req, res) => OrderController.viewOrders(req, res));
+app.get('/orders/:id', checkAuthenticated, (req, res) => OrderController.viewOrderDetails(req, res));
+
+/* Fallback / 404 */
+app.use((req, res) => {
+  res.status(404).render('index', { user: req.session.user, messages: [], errors: ['Page not found'] });
+});
+
+/* -------------------------
+   Start server
+   ------------------------- */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+module.exports = app;
