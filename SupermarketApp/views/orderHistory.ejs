@@ -34,8 +34,10 @@
             <% } %>
 
               <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2 class="mb-0">Your Orders</h2>
-                <a href="/shopping" class="btn btn-secondary">Continue Shopping</a>
+                <h2 class="mb-0"><%= user && user.role === 'admin' ? 'All Orders' : 'Your Orders' %></h2>
+                <% if (!user || user.role !== 'admin') { %>
+                  <a href="/shopping" class="btn btn-secondary">Continue Shopping</a>
+                <% } %>
               </div>
 
               <% if (!orders || orders.length===0) { %>
@@ -52,6 +54,9 @@
                       <thead class="table-light">
                         <tr>
                           <th scope="col">Order ID</th>
+                          <% if (user && user.role === 'admin') { %>
+                            <th scope="col">Customer</th>
+                          <% } %>
                           <th scope="col">Date</th>
                           <th scope="col">Total Amount</th>
                           <th scope="col" class="text-end">Actions</th>
@@ -62,10 +67,16 @@
                           <tr>
                             <td>#<%= order.id %>
                             </td>
+                            <% if (user && user.role === 'admin') { %>
+                              <td>
+                                <div class="fw-semibold"><%= order.customerName || 'N/A' %></div>
+                                <div class="text-muted small"><%= order.customerEmail || '' %></div>
+                              </td>
+                            <% } %>
                             <td>
                               <%= (new Date(order.created_at)).toLocaleString() %>
                             </td>
-                            <td>$<%= (order.total_amount || 0).toFixed(2) %>
+                            <td>$<%= (order.total || 0).toFixed(2) %>
                             </td>
                             <td class="text-end">
                               <a href="/orders/<%= order.id %>" class="btn btn-sm btn-outline-primary">View Details</a>
@@ -82,4 +93,3 @@
 </body>
 
 </html>
-<!-- ...existing code... -->

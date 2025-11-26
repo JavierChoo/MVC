@@ -1,51 +1,5 @@
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Supermarket App</title>
-  <!-- Add your CSS files here -->
-  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-  <style>
-    /* Sticky footer using flex layout (keeps footer at bottom without overlapping content) */
-    html,
-    body {
-      height: 100%;
-    }
-
-    body {
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-
-    /* Ensure main content expands so footer stays at bottom */
-    main,
-    .main,
-    .page-content {
-      flex: 1 0 auto;
-    }
-
-    footer.site-footer {
-      flex-shrink: 0;
-    }
-  </style>
-</head>
-
-<body>
-
-
-  <footer class="site-footer bg-dark text-light py-2">
-    <div class="container text-start">
-      <small>© Supermarket App <%= new Date().getFullYear() %></small>
-    </div>
-  </footer>
-
-  <!-- Add your JavaScript files here -->
-  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
-  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-</body>
-
-</html>
+<footer class="site-footer bg-dark text-light py-2 mt-auto">
+  <div class="container text-start">
+    <small>&copy; Supermarket App <%= new Date().getFullYear() %></small>
+  </div>
+</footer>

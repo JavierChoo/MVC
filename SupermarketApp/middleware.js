@@ -1,7 +1,20 @@
-// ...existing code...
-/**
- * Reusable validation middleware
- */
+// Combined auth + validation middleware
+
+const checkAuthenticated = (req, res, next) => {
+  if (req.session && req.session.user) {
+    return next();
+  }
+  req.flash('error', 'Please log in to view this resource');
+  return res.redirect('/login');
+};
+
+const checkAdmin = (req, res, next) => {
+  if (req.session && req.session.user && req.session.user.role === 'admin') {
+    return next();
+  }
+  req.flash('error', 'Access denied. Admins only.');
+  return res.redirect('/shopping');
+};
 
 const validateRegistration = (req, res, next) => {
   const { username, email, password, address, contact, role } = req.body;
@@ -25,7 +38,15 @@ const validateRegistration = (req, res, next) => {
 };
 
 const validateProduct = (req, res, next) => {
-  // normalise incoming fields (name used in forms)
+  const fs = require('fs');
+
+  // Helper to clean up uploaded file when validation fails
+  const cleanupUploadedFile = () => {
+    if (req.file && req.file.path) {
+      fs.unlink(req.file.path, () => {});
+    }
+  };
+
   const name = req.body.name || req.body.productName || '';
   const priceRaw = req.body.price;
   const quantityRaw = req.body.quantity;
@@ -49,11 +70,11 @@ const validateProduct = (req, res, next) => {
   }
 
   if (errors.length) {
+    cleanupUploadedFile();
+
     req.flash('error', errors);
-    // keep submitted form data to repopulate fields
     req.flash('formData', req.body);
 
-    // Decide redirect target based on route path
     try {
       const routePath = req.route && req.route.path ? req.route.path : '';
       if (routePath.includes('updateProduct') || routePath.includes('/updateProduct/:id')) {
@@ -64,11 +85,9 @@ const validateProduct = (req, res, next) => {
       // ignore and fallthrough
     }
 
-    // default to add product page
     return res.redirect('/addProduct');
   }
 
-  // attach normalized fields back to req.body for downstream handlers
   req.body.productName = name;
   req.body.price = Number(price);
   req.body.quantity = Number(quantity);
@@ -76,5 +95,9 @@ const validateProduct = (req, res, next) => {
   return next();
 };
 
-module.exports = { validateRegistration, validateProduct };
-// ...existing code...
+module.exports = {
+  checkAuthenticated,
+  checkAdmin,
+  validateRegistration,
+  validateProduct
+};

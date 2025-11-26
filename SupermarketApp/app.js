@@ -10,8 +10,12 @@ const CartController = require('./controllers/CartController');
 const OrderController = require('./controllers/OrderController');
 const CheckoutController = require('./controllers/CheckoutController');
 
-const { checkAuthenticated, checkAdmin } = require('./middleware/auth');
-const { validateRegistration, validateProduct } = require('./middleware/validation');
+const {
+  checkAuthenticated,
+  checkAdmin,
+  validateRegistration,
+  validateProduct
+} = require('./middleware');
 
 const app = express();
 
@@ -183,9 +187,10 @@ app.get('/deleteProduct/:id', checkAuthenticated, checkAdmin, (req, res) => {
 });
 
 /* Cart (persistent cart via CartController) */
-app.post('/add-to-cart/:id', checkAuthenticated, safeHandler(CartController, 'addToCart'));
+app.post('/add-to-cart/:productId', checkAuthenticated, safeHandler(CartController, 'addToCart'));
 app.get('/cart', checkAuthenticated, safeHandler(CartController, 'viewCart'));
 app.post('/cart/update/:id', checkAuthenticated, safeHandler(CartController, 'updateCartItem'));
+app.post('/cart/remove/:id', checkAuthenticated, safeHandler(CartController, 'removeCartItem'));
 app.post('/cart/clear', checkAuthenticated, safeHandler(CartController, 'clearCart'));
 
 /* Checkout */
@@ -222,6 +227,6 @@ app.use((req, res) => {
    Start server
    ------------------------- */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port http://localhost:${PORT}`));
 
 module.exports = app;
