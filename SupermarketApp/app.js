@@ -218,10 +218,17 @@ app.post('/checkout', checkAuthenticated, safeHandler(CheckoutController, 'check
 app.get('/orders', checkAuthenticated, safeHandler(OrderController, 'viewOrders'));
 app.get('/orders/:id', checkAuthenticated, safeHandler(OrderController, 'viewOrderDetails'));
 
+/* Users (admin) */
+app.get('/users', checkAuthenticated, checkAdmin, safeHandler(UserController, 'listUsers'));
+app.post('/users/delete/:id', checkAuthenticated, checkAdmin, safeHandler(UserController, 'deleteUser')); // legacy: soft-disable
+app.post('/users/role/:id', checkAuthenticated, checkAdmin, safeHandler(UserController, 'updateRole'));
+app.post('/users/toggle/:id', checkAuthenticated, checkAdmin, safeHandler(UserController, 'toggleUser'));
+
 /* Fallback / 404 */
 app.use((req, res) => {
   res.status(404).render('index', { messages: [], errors: ['Page not found'] });
 });
+
 
 /* -------------------------
    Start server

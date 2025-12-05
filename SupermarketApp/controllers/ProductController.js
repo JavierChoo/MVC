@@ -12,15 +12,22 @@ const ProductController = {
         return res.status(500).render('inventory', { products: [], messages: req.flash('error'), errors: req.flash('error') });
       }
 
-      products = (products || []).map(p => ({
-        ...p,
-        isOutOfStock: (p.quantity <= 0)
-      }));
+      const isAdmin = req.session.user && req.session.user.role === 'admin';
+      const allProducts = (products || []).map(p => {
+        const isOutOfStock = (p.quantity <= 0);
+        const isArchived = isOutOfStock && (p.productName || '').toLowerCase().includes('(deleted)');
+        return { ...p, isOutOfStock, isArchived };
+      });
 
-      if (req.session.user && req.session.user.role === 'admin') {
-        return res.render('inventory', { products, messages: req.flash('success'), errors: req.flash('error') });
+      // Shoppers see all active products, including out-of-stock ones (for visibility),
+      // but we hide archived entries that admins used to preserve order history.
+      const shopperView = allProducts.filter(p => !p.isArchived);
+
+      if (isAdmin) {
+        const adminView = allProducts.filter(p => !p.isArchived);
+        return res.render('inventory', { products: adminView, messages: req.flash('success'), errors: req.flash('error') });
       }
-      return res.render('shopping', { products, messages: req.flash('success'), errors: req.flash('error') });
+      return res.render('shopping', { products: shopperView, messages: req.flash('success'), errors: req.flash('error') });
     });
   },
 
@@ -131,43 +138,37 @@ const ProductController = {
 
       const imagePath = existing.image;
 
-      // Remove order items and cart items first to avoid FK constraint blocks
-      db.query('DELETE FROM order_items WHERE product_id = ?', [id], (orderErr) => {
-        if (orderErr) {
-          req.flash('error', 'Failed to delete product from orders');
+      // Clear carts so shoppers do not see archived product in cart
+      db.query('DELETE FROM cart_items WHERE product_id = ?', [id], (cartErr) => {
+        if (cartErr) {
+          req.flash('error', 'Failed to delete product from carts');
           return res.redirect('/inventory');
         }
 
-        db.query('DELETE FROM cart_items WHERE product_id = ?', [id], (cartErr) => {
-          if (cartErr) {
-            req.flash('error', 'Failed to delete product from carts');
+        // Soft-delete the product to preserve order history while removing it from shopping.
+        const archivedName = existing.productName.endsWith(' (deleted)') ? existing.productName : `${existing.productName} (deleted)`;
+        const archivedProduct = {
+          productName: archivedName,
+          price: existing.price,
+          quantity: 0, // mark unavailable
+          image: imagePath
+        };
+
+        Product.update(id, archivedProduct, (err2) => {
+          if (err2) {
+            req.flash('error', 'Failed to archive product');
             return res.redirect('/inventory');
           }
 
-          Product.delete(id, (err, result) => {
-            if (err) {
-              if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.errno === 1451) {
-                req.flash('error', 'Cannot delete product because it is linked to past orders.');
-              } else {
-                req.flash('error', 'Failed to delete product');
-              }
-              return res.status(500).redirect('/inventory');
-            }
-            if (result && result.affectedRows === 0) {
-              req.flash('error', 'Product not found');
-              return res.status(404).redirect('/inventory');
-            }
+          // Remove image file only if it was freshly uploaded and we're cleaning up
+          if (imagePath) {
+            const filename = imagePath.startsWith('/images/') ? imagePath.replace('/images/', '') : imagePath;
+            const fullPath = path.join(__dirname, '..', 'public', 'images', filename);
+            fs.unlink(fullPath, () => {});
+          }
 
-            // Remove image file if we created and stored it locally
-            if (imagePath) {
-              const filename = imagePath.startsWith('/images/') ? imagePath.replace('/images/', '') : imagePath;
-              const fullPath = path.join(__dirname, '..', 'public', 'images', filename);
-              fs.unlink(fullPath, () => {});
-            }
-
-            req.flash('success', 'Product deleted');
-            return res.redirect('/inventory');
-          });
+          req.flash('success', 'Product archived to preserve order history');
+          return res.redirect('/inventory');
         });
       });
     });

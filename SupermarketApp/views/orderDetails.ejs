@@ -77,7 +77,13 @@
                  total += subtotal;
             %>
               <tr>
-                <td><%= item.productName || ('Product #' + item.product_id) %></td>
+                <td>
+                  <% 
+                    const name = item.productName || ('Product #' + item.product_id);
+                    const cleanName = name.replace(/\s*\(deleted\)\s*$/i, '');
+                  %>
+                  <%= cleanName %>
+                </td>
                 <td>$<%= price.toFixed(2) %></td>
                 <td><%= qty %></td>
                 <td>$<%= subtotal.toFixed(2) %></td>

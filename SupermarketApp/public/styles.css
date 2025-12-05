@@ -1,0 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+  --brand: #0d6efd;
+  --brand-dark: #0b5ed7;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --card-bg: #ffffff;
+  --page-bg: linear-gradient(135deg, #f5f7fb 0%, #e9eef7 50%, #f7f9fc 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--page-bg);
+  color: var(--text);
+}
+
+.navbar {
+  background: #0f172a !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+.navbar .navbar-brand {
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.card {
+  border: none;
+  border-radius: 14px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.1);
+  background: var(--card-bg);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #0ea5e9, #6366f1);
+  border: none;
+  box-shadow: 0 10px 25px rgba(99, 102, 241, 0.35);
+}
+
+.btn-outline-primary {
+  border-color: #6366f1;
+  color: #4f46e5;
+}
+
+.btn-outline-primary:hover {
+  background: #4f46e5;
+  color: #fff;
+}
+
+.hero-card {
+  padding: 2.5rem;
+}
+
+.hero-title {
+  font-size: clamp(2rem, 3vw, 2.6rem);
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.hero-subtitle {
+  color: var(--muted);
+}
+
+.table thead {
+  letter-spacing: 0.04em;
+}
+
+.badge {
+  text-transform: lowercase;
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  font-weight: 600;
+}
+
+.footer-dark {
+  background: #0f172a;
+  color: #e5e7eb;
+}

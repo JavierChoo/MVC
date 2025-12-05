@@ -19,6 +19,7 @@ const checkAdmin = (req, res, next) => {
 const validateRegistration = (req, res, next) => {
   const { username, email, password, address, contact, role } = req.body;
   const errors = [];
+  const allowedRoles = ['user', 'admin'];
 
   if (!username || !username.toString().trim()) errors.push('Username is required');
   if (!email || !email.toString().trim()) errors.push('Email is required');
@@ -27,6 +28,7 @@ const validateRegistration = (req, res, next) => {
   if (!address || !address.toString().trim()) errors.push('Address is required');
   if (!contact || !contact.toString().trim()) errors.push('Contact is required');
   if (!role || !role.toString().trim()) errors.push('Role is required');
+  if (role && !allowedRoles.includes(role)) errors.push('Role is invalid');
 
   if (errors.length) {
     req.flash('error', errors);
