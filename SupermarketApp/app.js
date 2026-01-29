@@ -10,6 +10,7 @@ const CartController = require('./controllers/CartController');
 const OrderController = require('./controllers/OrderController');
 const CheckoutController = require('./controllers/CheckoutController');
 const PaypalController = require('./controllers/paypalController');
+const registerNetsRoutes = require('./routes/netsRoutes');
 
 const {
   checkAuthenticated,
@@ -206,6 +207,9 @@ app.get('/orders/:id', checkAuthenticated, safeHandler(OrderController, 'viewOrd
 /* PayPal API */
 app.post('/api/paypal/create-order', checkAuthenticated, safeHandler(PaypalController, 'createOrder'));
 app.post('/api/paypal/capture-order', checkAuthenticated, safeHandler(PaypalController, 'captureOrder'));
+
+/* NETS QR API */
+registerNetsRoutes(app, safeHandler, checkAuthenticated);
 
 /* Users (admin) */
 app.get('/users', checkAuthenticated, checkAdmin, safeHandler(UserController, 'listUsers'));
