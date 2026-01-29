@@ -1,45 +1,6 @@
-# ===========================
-# Environment / Secrets
-# ===========================
-.env
-
-# ===========================
-# Node Modules
-# ===========================
+# dependencies
 node_modules/
 
-# ===========================
-# Logs
-# ===========================
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-logs/
-*.log
-
-# ===========================
-# System Files
-# ===========================
-.DS_Store
-Thumbs.db
-
-# ===========================
-# Build Artifacts / Cache
-# ===========================
-dist/
-build/
-.cache/
-.tmp/
-
-# ===========================
-# IDE Specific
-# ===========================
-.vscode/
-.idea/
-
-# ===========================
-# OS temp files
-# ===========================
-*.swp
-*.swo
+# env files (secrets)
+.env
+.env.*
