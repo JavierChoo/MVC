@@ -5,13 +5,11 @@ const db = require('../db');
  *
  * Table: transactions
  *  - order_id (INT, FK -> orders.id)
- *  - paypal_order_id (VARCHAR)
- *  - payer_id (VARCHAR)
- *  - payer_email (VARCHAR)
+ *  - payment_method (VARCHAR)
+ *  - provider_txn_id (VARCHAR)
  *  - amount (DECIMAL)
- *  - currency (VARCHAR)
  *  - status (VARCHAR)
- *  - time (DATETIME/TIMESTAMP)
+ *  - created_at (TIMESTAMP)
  */
 const Transaction = {
   /**
@@ -19,30 +17,24 @@ const Transaction = {
    *
    * @param {object} data
    * @param {number|null} data.order_id
-   * @param {string} data.paypal_orderId
-   * @param {string} data.payerId
-   * @param {string} data.payerEmail
+   * @param {string} data.payment_method
+   * @param {string} data.provider_txn_id
    * @param {string|number} data.amount
-   * @param {string} data.currency
    * @param {string} data.status
-   * @param {string|Date|null} data.time
    * @param {function} callback
    */
   insertTransaction(data, callback) {
     const sql = `
       INSERT INTO transactions
-        (order_id, paypal_order_id, payer_id, payer_email, amount, currency, status, time)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (order_id, payment_method, provider_txn_id, amount, status, created_at)
+      VALUES (?, ?, ?, ?, ?, NOW())
     `;
     const params = [
       data.order_id || null,
-      data.paypal_orderId || null,
-      data.payerId || null,
-      data.payerEmail || null,
+      data.payment_method || null,
+      data.provider_txn_id || null,
       data.amount || null,
-      data.currency || null,
-      data.status || null,
-      data.time || new Date()
+      data.status || null
     ];
 
     db.query(sql, params, (err, result) => {

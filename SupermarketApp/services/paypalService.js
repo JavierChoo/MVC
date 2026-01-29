@@ -50,7 +50,7 @@ async function generateAccessToken() {
   return data;
 }
 
-async function createOrder(totalAmount, currency) {
+async function createOrder(totalAmount) {
   const tokenData = await generateAccessToken();
   const accessToken = tokenData.access_token;
 
@@ -65,7 +65,7 @@ async function createOrder(totalAmount, currency) {
       purchase_units: [
         {
           amount: {
-            currency_code: currency,
+            currency_code: "SGD",
             value: totalAmount,
           },
         },

@@ -73,14 +73,14 @@ CREATE TABLE `cart_items` (
 -- NEW TABLE: orders
 ----------------------------------------
 DROP TABLE IF EXISTS `orders`;
-CREATE TABLE `orders` (
-    `id` INT NOT NULL AUTO_INCREMENT,
-    `user_id` INT NOT NULL,
-    `total` DECIMAL(10,2) NOT NULL,
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB;
+CREATE TABLE orders (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  total DECIMAL(10,2) NOT NULL,
+  status ENUM('PENDING','PAID','CANCELLED') NOT NULL DEFAULT 'PENDING',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
 
 ----------------------------------------
 -- NEW TABLE: order_items

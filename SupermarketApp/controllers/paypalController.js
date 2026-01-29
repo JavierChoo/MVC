@@ -1,5 +1,6 @@
 const Cart = require("../models/Cart");
 const Order = require("../models/Order");
+const OrderItem = require("../models/OrderItem");
 const Transaction = require("../models/transactionModel");
 const paypalService = require("../services/paypalService");
 
@@ -26,11 +27,33 @@ function computeTotal(items) {
   return Number(total.toFixed(2));
 }
 
-function getOrderByIdAsync(orderId) {
+function getOrderByIdAsync(orderId, userId) {
   return new Promise((resolve, reject) => {
-    Order.getOrderById(orderId, null, (err, order) => {
+    Order.getOrderById(orderId, userId, (err, order) => {
       if (err) return reject(err);
       return resolve(order);
+    });
+  });
+}
+
+function getOrderItemsAsync(orderId) {
+  return new Promise((resolve, reject) => {
+    OrderItem.getItemsByOrderId(orderId, (err, items) => {
+      if (err) return reject(err);
+      return resolve(Array.isArray(items) ? items : []);
+    });
+  });
+}
+
+function clearCartByUserAsync(userId) {
+  return new Promise((resolve, reject) => {
+    Cart.getOrCreateCart(userId, (err, cart) => {
+      if (err) return reject(err);
+      if (!cart || !cart.id) return resolve(null);
+      Cart.clear(cart.id, (err2, result) => {
+        if (err2) return reject(err2);
+        return resolve(result);
+      });
     });
   });
 }
@@ -42,24 +65,29 @@ async function createOrder(req, res) {
       return res.status(401).json({ error: "Login required." });
     }
 
-    const { cart, items } = await getCartItemsForUser(user.id);
-    if (!cart) {
-      return res.status(404).json({ error: "Cart not found." });
-    }
-    if (!items.length) {
-      return res.status(404).json({ error: "Cart is empty." });
+    const appOrderIdRaw = req.body && req.body.appOrderId;
+    const appOrderId = Number.isFinite(Number(appOrderIdRaw))
+      ? Number(appOrderIdRaw)
+      : null;
+    if (!appOrderId) {
+      return res.status(400).json({ error: "Missing appOrderId." });
     }
 
-    const totalAmount = computeTotal(items);
+    const existingOrder = await getOrderByIdAsync(appOrderId, null);
+    if (!existingOrder) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+    if (existingOrder.user_id !== user.id) {
+      return res.status(403).json({ error: "Not authorized for this order." });
+    }
+
+    const orderItems = await getOrderItemsAsync(appOrderId);
+    const totalAmount = computeTotal(orderItems);
     if (totalAmount <= 0) {
-      return res.status(400).json({ error: "Invalid cart total." });
+      return res.status(400).json({ error: "Invalid order total." });
     }
 
-    const currency = (req.body && req.body.currency) || "USD";
-    const order = await paypalService.createOrder(
-      totalAmount.toFixed(2),
-      currency
-    );
+    const order = await paypalService.createOrder(totalAmount.toFixed(2));
 
     return res.json({ id: order.id });
   } catch (err) {
@@ -74,28 +102,33 @@ async function createOrder(req, res) {
 
 async function captureOrder(req, res) {
   try {
-    const orderId = req.body && req.body.orderId;
-    if (!orderId) {
-      return res.status(400).json({ error: "Missing orderId." });
+    const user = req.session.user;
+    if (!user) {
+      return res.status(401).json({ error: "Login required." });
     }
 
-    const localOrderIdRaw =
-      (req.body && (req.body.localOrderId || req.body.orderDbId)) || null;
-    const localOrderId = Number.isFinite(Number(localOrderIdRaw))
-      ? Number(localOrderIdRaw)
+    const paypalOrderId = (req.body && (req.body.paypalOrderId || req.body.orderId)) || null;
+    if (!paypalOrderId) {
+      return res.status(400).json({ error: "Missing paypalOrderId." });
+    }
+
+    const appOrderIdRaw = req.body && req.body.appOrderId;
+    const appOrderId = Number.isFinite(Number(appOrderIdRaw))
+      ? Number(appOrderIdRaw)
       : null;
-
-    if (localOrderId !== null) {
-      const localOrder = await getOrderByIdAsync(localOrderId);
-      if (!localOrder) {
-        return res.status(404).json({ error: "Order not found." });
-      }
+    if (!appOrderId) {
+      return res.status(400).json({ error: "Missing appOrderId." });
     }
 
-    const capture = await paypalService.captureOrder(orderId);
+    const existingOrder = await getOrderByIdAsync(appOrderId, null);
+    if (!existingOrder) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+    if (existingOrder.user_id !== user.id) {
+      return res.status(403).json({ error: "Not authorized for this order." });
+    }
 
-    const payer = capture.payer || {};
-    const payerId = payer.payer_id || null;
+    const capture = await paypalService.captureOrder(paypalOrderId);
 
     const purchaseUnit =
       capture.purchase_units && capture.purchase_units.length
@@ -121,26 +154,23 @@ async function captureOrder(req, res) {
       null;
     const status =
       (captureInfo && captureInfo.status) || capture.status || null;
-    const captureTime =
-      (captureInfo && (captureInfo.create_time || captureInfo.update_time)) ||
-      capture.create_time ||
-      null;
-
     if (!amountValue || !currencyCode) {
       return res.status(502).json({ error: "PayPal capture missing amount." });
     }
+    if (status && String(status).toUpperCase() !== "COMPLETED") {
+      return res.status(400).json({ error: "Payment not completed." });
+    }
+
+    const finalOrderId = appOrderId;
 
     await new Promise((resolve, reject) => {
       Transaction.insertTransaction(
         {
-          order_id: localOrderId,
-          paypal_orderId: orderId,
-          payerId,
-          payerEmail: payer.email_address || null,
+          order_id: finalOrderId,
+          payment_method: "PAYPAL",
+          provider_txn_id: paypalOrderId,
           amount: amountValue,
-          currency: currencyCode,
-          status,
-          time: captureTime || new Date(),
+          status: "SUCCESS"
         },
         (err, result) => {
           if (err) return reject(err);
@@ -149,14 +179,16 @@ async function captureOrder(req, res) {
       );
     });
 
-    if (localOrderId !== null) {
+    if (finalOrderId !== null) {
       await new Promise((resolve, reject) => {
-        Order.markOrderPaid(localOrderId, (err, result) => {
+        Order.markOrderPaid(finalOrderId, (err, result) => {
           if (err) return reject(err);
           return resolve(result);
         });
       });
     }
+
+    await clearCartByUserAsync(user.id);
 
     return res.json(capture);
   } catch (err) {

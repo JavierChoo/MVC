@@ -196,24 +196,7 @@ app.post('/cart/remove/:id', checkAuthenticated, safeHandler(CartController, 're
 app.post('/cart/clear', checkAuthenticated, safeHandler(CartController, 'clearCart'));
 
 /* Checkout */
-app.get('/checkout', checkAuthenticated, (req, res) => {
-  // render confirmation page using cart items (controller could be extended)
-  const Cart = require('./models/Cart');
-  const user = req.session.user;
-  Cart.getOrCreateCart(user.id, (err, cart) => {
-    if (err) {
-      req.flash('error', 'Unable to load cart');
-      return res.redirect('/cart');
-    }
-    Cart.getCartItems(cart.id, (err2, items) => {
-      if (err2) {
-        req.flash('error', 'Unable to load cart');
-        return res.redirect('/cart');
-      }
-      res.render('checkout', { cart: items || [], messages: req.flash('success'), errors: req.flash('error') });
-    });
-  });
-});
+app.get('/checkout', checkAuthenticated, safeHandler(CheckoutController, 'showCheckout'));
 app.post('/checkout', checkAuthenticated, safeHandler(CheckoutController, 'checkout'));
 
 /* Orders */

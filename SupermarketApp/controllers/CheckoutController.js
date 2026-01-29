@@ -5,11 +5,6 @@ const OrderItem = require('../models/OrderItem');
 
 const CheckoutController = {
   showCheckout(req, res) {
-    // rely on res.locals.user in views; do not pass user manually
-    return res.render('checkout', { messages: req.flash('success'), errors: req.flash('error') });
-  },
-
-  checkout(req, res) {
     const user = req.session.user;
     if (!user) {
       req.flash('error', 'Please log in to checkout');
@@ -18,60 +13,93 @@ const CheckoutController = {
 
     Cart.getOrCreateCart(user.id, (err, cart) => {
       if (err) {
-        req.flash('error', 'Unable to access cart');
+        req.flash('error', 'Unable to load cart');
         return res.redirect('/cart');
       }
 
       Cart.getCartItems(cart.id, (err2, items) => {
         if (err2) {
-          req.flash('error', 'Unable to retrieve cart items');
+          req.flash('error', 'Unable to load cart');
           return res.redirect('/cart');
         }
 
-        if (!items || items.length === 0) {
-          req.flash('error', 'Your cart is empty');
-          return res.redirect('/cart');
+        const cartItems = items || [];
+        if (!cartItems.length) {
+          return res.render('checkout', {
+            cart: [],
+            messages: req.flash('success'),
+            errors: req.flash('error'),
+            paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
+            appOrderId: null
+          });
         }
 
-        const totalAmount = items.reduce((sum, it) => sum + ((it.price || 0) * (it.quantity || 0)), 0);
+        const totalAmount = cartItems.reduce(
+          (sum, it) => sum + (Number(it.price) || 0) * (Number(it.quantity) || 0),
+          0
+        );
 
-        Order.createOrder(user.id, totalAmount, (err3, order) => {
-          if (err3) {
-            req.flash('error', 'Failed to create order');
-            return res.redirect('/cart');
+        const existingOrderId = req.session.pendingOrderId || null;
+        if (existingOrderId) {
+          Order.getOrderById(existingOrderId, null, (err3, order) => {
+            if (err3 || !order || order.user_id !== user.id) {
+              req.session.pendingOrderId = null;
+              return createPendingOrder();
+            }
+            return renderCheckout(existingOrderId);
+          });
+          return;
+        }
+
+        return createPendingOrder();
+
+        function renderCheckout(orderId) {
+          return res.render('checkout', {
+            cart: cartItems,
+            messages: req.flash('success'),
+            errors: req.flash('error'),
+            paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
+            appOrderId: orderId
+          });
+        }
+
+        function createPendingOrder() {
+          if (totalAmount <= 0) {
+            req.flash('error', 'Invalid cart total');
+            return renderCheckout(null);
           }
 
-          let pending = items.length;
-          let hadError = false;
+          Order.createOrder(user.id, totalAmount, (err3, order) => {
+            if (err3 || !order || !order.id) {
+              req.flash('error', 'Failed to create order');
+              return renderCheckout(null);
+            }
 
-          items.forEach((it) => {
-            OrderItem.create(order.id, it.product_id || it.productId || it.productId, it.quantity, it.price, (err4) => {
-              if (err4) {
-                hadError = true;
-                console.error('Failed to add order item', err4);
-              }
+            let pending = cartItems.length;
+            let hadError = false;
 
-              pending -= 1;
-              if (pending === 0) {
-                if (hadError) {
-                  req.flash('error', 'Order was created but some items failed to save. Contact support.');
-                } else {
-                  req.flash('success', 'Order placed successfully');
-                }
-
-                Cart.clear(cart.id, (errClear) => {
-                  if (errClear) {
-                    console.error('Failed to clear cart after checkout', errClear);
-                    req.flash('error', 'Order placed but failed to clear cart. Contact support.');
+            cartItems.forEach((it) => {
+              const productId = it.product_id || it.productId || it.productID;
+              OrderItem.create(order.id, productId, it.quantity, it.price, (err4) => {
+                if (err4) hadError = true;
+                pending -= 1;
+                if (pending === 0) {
+                  if (hadError) {
+                    req.flash('error', 'Some order items failed to save.');
                   }
-                  return res.redirect('/orders');
-                });
-              }
+                  req.session.pendingOrderId = order.id;
+                  return renderCheckout(order.id);
+                }
+              });
             });
           });
-        });
+        }
       });
     });
+  },
+
+  checkout(req, res) {
+    return res.redirect('/checkout');
   }
 };
 

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checkout - Supermarket App</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <% if (paypalClientId) { %>
+    <script src="https://www.paypal.com/sdk/js?client-id=<%= paypalClientId %>&currency=SGD"></script>
+  <% } %>
+</head>
+<body class="bg-light">
+  <nav class="navbar navbar-expand-sm bg-dark navbar-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">Supermarket App</a>
+      <div class="collapse navbar-collapse">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item"><a class="nav-link" href="/shopping">Shop</a></li>
+          <li class="nav-item"><a class="nav-link" href="/cart">Cart</a></li>
+        </ul>
+      </div>
+      <div class="d-flex align-items-center">
+        <% if (user) { %>
+          <span class="text-light me-3"><%= user.username %> (<%= user.role %>)</span>
+          <a class="btn btn-outline-light btn-sm" href="/logout">Logout</a>
+        <% } else { %>
+          <a class="btn btn-outline-light btn-sm" href="/login">Login</a>
+        <% } %>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container py-4">
+    <% if (errors && errors.length) { %>
+      <div class="alert alert-danger">
+        <% errors.forEach(function(e){ %><div><%= e %></div><% }) %>
+      </div>
+    <% } %>
+
+    <% if (messages && messages.length) { %>
+      <div class="alert alert-success">
+        <% messages.forEach(function(m){ %><div><%= m %></div><% }) %>
+      </div>
+    <% } %>
+
+    <h2 class="mb-4">Order Confirmation</h2>
+
+    <% if (!cart || cart.length === 0) { %>
+      <div class="card">
+        <div class="card-body">
+          <p class="mb-0">Your cart is empty.</p>
+          <a href="/shopping" class="btn btn-primary mt-3">Continue Shopping</a>
+        </div>
+      </div>
+    <% } else { %>
+      <div class="table-responsive mb-3">
+        <table class="table align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Product</th>
+              <th>Price</th>
+              <th>Quantity</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% let total = 0; %>
+            <% cart.forEach(function(item){ 
+                 const imgSrc = item.image
+                   ? (typeof item.image === 'string' && item.image.startsWith('/') ? item.image : '/images/' + item.image)
+                   : '/images/default.png';
+                 const price = Number(item.price) || 0;
+                 const qty = Number(item.quantity) || 0;
+                 const subtotal = price * qty;
+                 total += subtotal;
+            %>
+              <tr>
+                <td>
+                  <div class="d-flex align-items-center">
+                    <img src="<%= imgSrc %>" alt="<%= item.productName %>" class="img-thumbnail me-3" style="width:100px; height:80px; object-fit:cover;">
+                    <div>
+                      <div class="fw-bold"><%= item.productName %></div>
+                    </div>
+                  </div>
+                </td>
+                <td>$<%= price.toFixed(2) %></td>
+                <td><%= qty %></td>
+                <td>$<%= subtotal.toFixed(2) %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="3" class="text-end">Total</th>
+              <th>$<%= total.toFixed(2) %></th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="d-flex flex-wrap gap-3 justify-content-between align-items-center">
+        <a href="/cart" class="btn btn-secondary">Back to Cart</a>
+
+        <div class="text-end">
+          <input type="hidden" id="app-order-id" value="<%= appOrderId || '' %>">
+          <div id="paypal-button-container" class="mb-2"></div>
+          <div id="paypal-error" class="text-danger small"></div>
+        </div>
+      </div>
+    <% } %>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <% if (paypalClientId && cart && cart.length) { %>
+  <script>
+    (function () {
+      window.APP_ORDER_ID = <%- JSON.stringify(appOrderId || null) %>;
+      const errorEl = document.getElementById("paypal-error");
+      const appOrderId = window.APP_ORDER_ID || document.getElementById("app-order-id").value;
+      function showError(message) {
+        if (errorEl) errorEl.textContent = message || "PayPal error.";
+      }
+
+      if (!window.paypal) {
+        showError("PayPal SDK failed to load.");
+        return;
+      }
+
+      if (!appOrderId) {
+        showError("Order not found. Please refresh the page.");
+        return;
+      }
+
+      window.paypal.Buttons({
+        createOrder: function () {
+          return fetch("/api/paypal/create-order", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ appOrderId: appOrderId })
+          })
+            .then(function (res) {
+              if (!res.ok) return res.json().then(function (e) { throw e; });
+              return res.json();
+            })
+            .then(function (data) {
+              if (!data || !data.id) throw new Error("No PayPal order id returned.");
+              return data.id;
+            });
+        },
+        onApprove: function (data) {
+          return fetch("/api/paypal/capture-order", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paypalOrderId: data.orderID, appOrderId: appOrderId })
+          })
+            .then(function (res) {
+              if (!res.ok) return res.json().then(function (e) { throw e; });
+              return res.json();
+            })
+            .then(function () {
+              window.location.href = "/orders";
+            });
+        },
+        onError: function (err) {
+          const message = err && (err.error || err.message) ? (err.error || err.message) : "Payment failed.";
+          showError(message);
+        },
+        onCancel: function () {
+          showError("Payment cancelled. Please try again.");
+        }
+      }).render("#paypal-button-container");
+    })();
+  </script>
+  <% } %>
+</body>
+</html>
