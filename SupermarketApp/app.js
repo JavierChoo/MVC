@@ -9,6 +9,7 @@ const UserController = require('./controllers/UserController');
 const CartController = require('./controllers/CartController');
 const OrderController = require('./controllers/OrderController');
 const CheckoutController = require('./controllers/CheckoutController');
+const PaypalController = require('./controllers/paypalController');
 
 const {
   checkAuthenticated,
@@ -104,7 +105,8 @@ function safeHandler(controller, fnName) {
   ['UserController', UserController],
   ['CartController', CartController],
   ['OrderController', OrderController],
-  ['CheckoutController', CheckoutController]
+  ['CheckoutController', CheckoutController],
+  ['PaypalController', PaypalController]
 ].forEach(([name, ctrl]) => {
   if (!ctrl) console.error(`${name} is undefined after require`);
 });
@@ -217,6 +219,10 @@ app.post('/checkout', checkAuthenticated, safeHandler(CheckoutController, 'check
 /* Orders */
 app.get('/orders', checkAuthenticated, safeHandler(OrderController, 'viewOrders'));
 app.get('/orders/:id', checkAuthenticated, safeHandler(OrderController, 'viewOrderDetails'));
+
+/* PayPal API */
+app.post('/api/paypal/create-order', checkAuthenticated, safeHandler(PaypalController, 'createOrder'));
+app.post('/api/paypal/capture-order', checkAuthenticated, safeHandler(PaypalController, 'captureOrder'));
 
 /* Users (admin) */
 app.get('/users', checkAuthenticated, checkAdmin, safeHandler(UserController, 'listUsers'));

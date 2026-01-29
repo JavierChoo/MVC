@@ -139,6 +139,31 @@ const Order = {
   },
 
   /**
+   * Mark an order as paid.
+   *
+   * @param {number} orderId
+   * @param {function} callback - function(err, result)
+   */
+  markOrderPaid(orderId, callback) {
+    const sql = `
+      UPDATE orders
+      SET status = 'PAID'
+      WHERE id = ?
+    `;
+    db.query(sql, [orderId], (err, result) => {
+      if (err) {
+        console.error('Order.markOrderPaid - SQL error');
+        console.error('SQL:', sql.trim());
+        console.error('Params:', [orderId]);
+        console.error('Error code:', err.code);
+        console.error('Error message:', err.message);
+        return callback(err);
+      }
+      return callback(null, result);
+    });
+  },
+
+  /**
    * Get all items for a specific order, joined with product details.
    *
    * @param {number} orderId     - ID of the order
