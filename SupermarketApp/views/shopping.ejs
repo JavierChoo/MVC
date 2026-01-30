@@ -14,28 +14,20 @@
 
   <div class="container py-4">
 
-    <!-- Flash messages (placed below navbar) -->
-    <% if ((errors && errors.length) || (messages && messages.length)) { %>
-      <div class="mb-3">
-        <% if (errors && errors.length) { %>
-          <% errors.forEach(function(errMsg){ %>
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-              <%= errMsg %>
-              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-          <% }) %>
-        <% } %>
+    <script>
+      window.addEventListener("load", function () {
+        document.body.classList.remove("modal-open");
+        document.querySelectorAll(".modal-backdrop, .offcanvas-backdrop, .backdrop, .overlay")
+          .forEach(function (el) { el.remove(); });
+        document.body.style.removeProperty("overflow");
+        document.body.style.removeProperty("padding-right");
 
-        <% if (messages && messages.length) { %>
-          <% messages.forEach(function(msg){ %>
-            <div class="alert alert-success alert-dismissible fade show" role="alert">
-              <%= msg %>
-              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-          <% }) %>
-        <% } %>
-      </div>
-    <% } %>
+        const showAlert = <%= showAddedAlert ? "true" : "false" %>;
+        if (showAlert) {
+          alert("Item added to cart");
+        }
+      });
+    </script>
 
     <p>Welcome, <%= user.username %> (<%= user.role %>)</p>
 
@@ -53,7 +45,7 @@
         <div class="col-6 col-sm-6 col-md-4 col-lg-3">
           <div class="card h-100 shadow-sm">
             <img src="<%= imgSrc %>" class="card-img-top" alt="<%= product.productName %>"
-              style="object-fit: cover; height:180px;">
+              loading="lazy" width="300" height="180" style="object-fit: cover; height:180px;">
             <div class="card-body d-flex flex-column">
               <h5 class="card-title mb-2">
                 <a href="/product/<%= product.id %>" class="text-decoration-none text-dark">

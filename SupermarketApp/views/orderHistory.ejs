@@ -68,9 +68,8 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <% const sortedOrders = (orders || []).slice().sort(function(a,b){ return new Date(b.created_at) - new Date(a.created_at); });
-                           sortedOrders.forEach(function(order, idx) { 
-                             const displayNumber = idx + 1;
+                        <% (orders || []).forEach(function(order) { 
+                             const displayNumber = order.displayNo || order.id;
                         %>
                           <tr>
                             <td>

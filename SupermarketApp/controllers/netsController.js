@@ -72,6 +72,19 @@ function getCartItemsForUser(userId) {
   });
 }
 
+function clearCartByOrderIdAsync(orderId) {
+  return new Promise((resolve) => {
+    if (!orderId) return resolve();
+    Order.getOrderById(orderId, null, (err, order) => {
+      if (err || !order || !order.user_id) return resolve();
+      Cart.getOrCreateCart(order.user_id, (cartErr, cart) => {
+        if (cartErr || !cart || !cart.id) return resolve();
+        Cart.clear(cart.id, () => resolve());
+      });
+    });
+  });
+}
+
 async function generateQr(req, res) {
   try {
     const user = req.session.user;
@@ -280,6 +293,7 @@ async function streamStatus(req, res) {
             [txnRef],
             (errTxn, rows) => {
               const expectedAmount = rows && rows.length ? Number(rows[0].amount) : null;
+              const orderId = rows && rows.length ? rows[0].order_id : null;
               const paidAmount = result.amount != null ? Number(result.amount) : null;
               const decision = decideFinalStatus({
                 mappedStatus: status,
@@ -294,6 +308,11 @@ async function streamStatus(req, res) {
                 [decision.finalStatus, txnRef],
                 () => {}
               );
+              if (decision.finalStatus === "SUCCESS" && orderId) {
+                clearCartByOrderIdAsync(orderId).catch((clearErr) => {
+                  console.error("NETS clear cart failed:", clearErr);
+                });
+              }
               console.log("[SSE EVENT OUT]", { txnRef, status: decision.finalStatus });
               console.log("[SSE END]", { txnRef, reason: decision.reason });
               res.end();

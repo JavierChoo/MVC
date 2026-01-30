@@ -58,8 +58,8 @@ const CartController = {
               return res.redirect('/shopping');
             }
 
-            req.flash('success', 'Item added to cart');
-            return res.redirect('/cart');
+            req.session.itemAdded = true;
+            return res.redirect('/shopping');
           });
         });
       });

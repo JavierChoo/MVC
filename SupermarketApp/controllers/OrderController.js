@@ -38,8 +38,16 @@ function viewOrders(req, res) {
         return res.redirect('/shopping');
       }
 
+      const normalized = Array.isArray(orders) ? orders : [];
+      if (user.role !== 'admin') {
+        const total = normalized.length;
+        normalized.forEach((o, idx) => {
+          o.displayNo = total - idx;
+        });
+      }
+
       return res.render(viewName, {
-        orders: Array.isArray(orders) ? orders : [],
+        orders: normalized,
         messages: req.flash('success'),
         errors: req.flash('error')
       });
@@ -89,18 +97,34 @@ function viewOrderDetails(req, res) {
         const detailViewPath = path.join(viewsDir, 'orderDetails.ejs');
         const fallbackHistoryPath = path.join(viewsDir, 'orderHistory.ejs');
 
-        if (fs.existsSync(detailViewPath)) {
-          return res.render('orderDetails', { order, items: items || [], messages: req.flash('success'), errors: req.flash('error') });
+        const renderDetails = () => {
+          if (fs.existsSync(detailViewPath)) {
+            return res.render('orderDetails', { order, items: items || [], messages: req.flash('success'), errors: req.flash('error') });
+          }
+
+          if (fs.existsSync(fallbackHistoryPath)) {
+            req.flash('info', 'Order details view not available; showing order history instead.');
+            return res.render('orderHistory', { orders: [order], messages: req.flash('success'), errors: req.flash('error'), items: items || [], orderId });
+          }
+
+          console.error('OrderController.viewOrderDetails - neither orderDetails.ejs nor orderHistory.ejs found in views directory.');
+          req.flash('error', 'Order details view not found');
+          return res.redirect('/orders');
+        };
+
+        if (!isAdmin) {
+          return Order.getOrdersByUser(user.id, (rankErr, ordersList) => {
+            if (!rankErr && Array.isArray(ordersList)) {
+              const idx = ordersList.findIndex(o => o.id === orderId);
+              if (idx >= 0) {
+                order.displayNo = ordersList.length - idx;
+              }
+            }
+            return renderDetails();
+          });
         }
 
-        if (fs.existsSync(fallbackHistoryPath)) {
-          req.flash('info', 'Order details view not available; showing order history instead.');
-          return res.render('orderHistory', { orders: [order], messages: req.flash('success'), errors: req.flash('error'), items: items || [], orderId });
-        }
-
-        console.error('OrderController.viewOrderDetails - neither orderDetails.ejs nor orderHistory.ejs found in views directory.');
-        req.flash('error', 'Order details view not found');
-        return res.redirect('/orders');
+        return renderDetails();
       });
     });
   } catch (ex) {

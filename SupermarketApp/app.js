@@ -71,8 +71,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 */
 app.use((req, res, next) => {
   res.locals.user = req.session && req.session.user ? req.session.user : null;
-  res.locals.messages = req.flash('success') || [];
-  res.locals.errors = req.flash('error') || [];
+  const success = req.flash('success') || [];
+  const error = req.flash('error') || [];
+  res.locals.success = success;
+  res.locals.error = error;
+  res.locals.messages = success;
+  res.locals.errors = error;
   next();
 });
 
@@ -119,7 +123,7 @@ function safeHandler(controller, fnName) {
 /* Home */
 app.get('/', (req, res) => {
   // simple home render; res.locals.user is available in views
-  res.render('index', { messages: req.flash('success'), errors: req.flash('error') });
+  res.render('index', { messages: res.locals.messages, errors: res.locals.errors });
 });
 
 /* User auth */

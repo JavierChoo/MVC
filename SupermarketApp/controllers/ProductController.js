@@ -25,9 +25,16 @@ const ProductController = {
 
       if (isAdmin) {
         const adminView = allProducts.filter(p => !p.isArchived);
-        return res.render('inventory', { products: adminView, messages: req.flash('success'), errors: req.flash('error') });
+        return res.render('inventory', { products: adminView, messages: res.locals.success, errors: res.locals.error });
       }
-      return res.render('shopping', { products: shopperView, messages: req.flash('success'), errors: req.flash('error') });
+      const showAddedAlert = !!(req.session && req.session.itemAdded);
+      if (req.session) req.session.itemAdded = false;
+      return res.render('shopping', {
+        products: shopperView,
+        messages: res.locals.success,
+        errors: res.locals.error,
+        showAddedAlert
+      });
     });
   },
 
