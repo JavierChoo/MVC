@@ -8,6 +8,36 @@ const NETS_QR_QUERY_URL =
 const API_KEY = process.env.API_KEY;
 const PROJECT_ID = process.env.PROJECT_ID;
 
+const loggedTxnRefs = new Set();
+
+function mapNetsToAppStatus(raw) {
+  const data = raw || {};
+  const result = data.result && data.result.data ? data.result.data : null;
+  const txnStatusRaw = result && result.txn_status != null ? Number(result.txn_status) : null;
+
+  // NETS sandbox: txn_status drives payment state. Do NOT treat top-level status as payment success.
+  if (txnStatusRaw === 0) return "PENDING";
+  if (txnStatusRaw === 1) return "SUCCESS";
+  if (txnStatusRaw === 2 || txnStatusRaw === 9) return "FAILED";
+
+  // Fallback: if txn_status is missing or unknown, keep pending.
+  return "PENDING";
+}
+
+function extractNetsAmount(raw) {
+  const data = raw || {};
+  const result = data.result && data.result.data ? data.result.data : null;
+  const rawAmount =
+    (result && (result.amount || result.amt_in_dollars || result.txn_amount || result.txn_amt)) ||
+    data.amount ||
+    data.amt_in_dollars ||
+    data.txn_amount ||
+    data.txn_amt ||
+    null;
+  const amount = Number(rawAmount);
+  return Number.isFinite(amount) ? amount : null;
+}
+
 async function queryStatusByRef(txn_retrieval_ref) {
   if (!NETS_QR_QUERY_URL) {
     throw new Error("NETS_QR_QUERY_URL is not configured.");
@@ -32,21 +62,23 @@ async function queryStatusByRef(txn_retrieval_ref) {
   );
 
   const data = response.data || {};
+  if (!loggedTxnRefs.has(txn_retrieval_ref)) {
+    console.log("[NETS RAW QUERY]", txn_retrieval_ref, JSON.stringify(data, null, 2));
+    loggedTxnRefs.add(txn_retrieval_ref);
+  }
   const result = data.result && data.result.data ? data.result.data : null;
-  const responseCode = result && result.response_code ? String(result.response_code) : null;
-  const txnStatus = result && result.txn_status != null ? Number(result.txn_status) : null;
-  let normalizedStatus = "PENDING";
-  if (responseCode === "00" && txnStatus === 2) normalizedStatus = "SUCCESS";
-  if (responseCode && responseCode !== "00" && txnStatus === 0) normalizedStatus = "FAILED";
   const txnRetrievalRef =
     (result && (result.txn_retrieval_ref || result.txnRetrievalRef)) ||
     data.txn_retrieval_ref ||
     data.txnRetrievalRef ||
     txn_retrieval_ref;
+  const normalizedStatus = mapNetsToAppStatus(data);
+  const paidAmount = extractNetsAmount(data);
 
   return {
     txn_retrieval_ref: txnRetrievalRef,
     status: normalizedStatus,
+    amount: paidAmount,
     raw: data
   };
 }
@@ -105,5 +137,6 @@ async function generateQr(payload) {
 
 module.exports = {
   generateQr,
-  queryStatusByRef
+  queryStatusByRef,
+  mapNetsToAppStatus
 };

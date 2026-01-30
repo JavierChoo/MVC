@@ -225,8 +225,13 @@
         }).render("#paypal-button-container");
       }
 
+      let netsRequestInFlight = false;
+      let netsRedirected = false;
       if (netsBtn && appOrderId) {
         netsBtn.addEventListener("click", function () {
+          if (netsBtn.disabled || netsRequestInFlight) return;
+          netsBtn.disabled = true;
+          netsRequestInFlight = true;
           showNetsError("");
           if (netsStatusEl) {
             netsStatusEl.textContent = "Requesting NETS QR...";
@@ -241,7 +246,12 @@
               return res.json();
             })
             .then(function (data) {
-              if (!data || !data.qr_code) {
+              if (data && data.txn_retrieval_ref && !data.qr_code) {
+                if (netsStatusEl) netsStatusEl.textContent = "Waiting for payment...";
+                startSseStatus(data.txn_retrieval_ref);
+                return;
+              }
+              if (!data || !data.qr_code || !data.txn_retrieval_ref) {
                 throw new Error("No NETS QR code returned.");
               }
               if (netsQrImage) {
@@ -253,9 +263,7 @@
               if (netsStatusEl) {
                 netsStatusEl.textContent = "Waiting for payment...";
               }
-              if (data.txn_retrieval_ref) {
-                startSseStatus(data.txn_retrieval_ref);
-              }
+              startSseStatus(data.txn_retrieval_ref);
             })
             .catch(function (err) {
               const message = err && (err.error || err.message) ? (err.error || err.message) : "Failed to request NETS QR.";
@@ -263,43 +271,65 @@
               if (netsStatusEl) {
                 netsStatusEl.textContent = "";
               }
+              netsBtn.disabled = false;
+              netsRequestInFlight = false;
             });
         });
       }
 
       let netsSse = null;
+      let netsTerminal = false;
       function startSseStatus(txnRetrievalRef) {
         if (netsSse) {
           netsSse.close();
           netsSse = null;
         }
-        const timeoutMs = 5 * 60 * 1000;
+        netsTerminal = false;
+        const timeoutMs = 2 * 60 * 1000;
         const timeout = setTimeout(function () {
           if (netsSse) netsSse.close();
-          if (netsStatusEl) netsStatusEl.textContent = "Still waiting for payment...";
+          if (netsStatusEl) netsStatusEl.textContent = "Payment timed out. Please try again.";
         }, timeoutMs);
 
         netsSse = new EventSource("/api/nets/stream/" + encodeURIComponent(txnRetrievalRef));
 
-        netsSse.addEventListener("payment", function (event) {
+        netsSse.onmessage = function (event) {
           const data = JSON.parse(event.data || "{}");
           const status = String(data.status || "PENDING").toUpperCase();
-          if (status === "SUCCESS" || status === "COMPLETED") {
+          if (netsTerminal || netsRedirected) return;
+          if (status === "SUCCESS") {
             clearTimeout(timeout);
             if (netsStatusEl) netsStatusEl.textContent = "Payment successful. Redirecting...";
+            if (netsSse) netsSse.close();
+            netsTerminal = true;
+            netsRedirected = true;
             window.location.href = "/orders";
-          } else if (status === "FAILED") {
-            clearTimeout(timeout);
-            showNetsError("Payment failed. Please try again.");
-            if (netsStatusEl) netsStatusEl.textContent = "";
+            return;
           }
-          if (netsSse) netsSse.close();
-        });
-
-        netsSse.addEventListener("error", function () {
-          // Ignore transient errors; keep waiting.
+          if (status === "FAILED" || status === "TIMEOUT") {
+            clearTimeout(timeout);
+            if (netsSse) netsSse.close();
+            netsTerminal = true;
+            netsRedirected = true;
+            window.location.href = "/cart";
+            return;
+          }
+          if (status === "PENDING_TIMEOUT") {
+            clearTimeout(timeout);
+            if (netsSse) netsSse.close();
+            netsTerminal = true;
+            if (netsStatusEl) netsStatusEl.textContent = "Payment timed out. Please try again.";
+            netsBtn.disabled = false;
+            netsRequestInFlight = false;
+            return;
+          }
           if (netsStatusEl) netsStatusEl.textContent = "Waiting for payment...";
-        });
+        };
+
+        netsSse.onerror = function () {
+          // Do not redirect on SSE errors; allow reconnects.
+          if (netsStatusEl) netsStatusEl.textContent = "Waiting for payment...";
+        };
       }
     })();
   </script>
