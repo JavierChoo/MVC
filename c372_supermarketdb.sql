@@ -98,18 +98,16 @@ CREATE TABLE `order_items` (
 ) ENGINE=InnoDB;
 
 ----------------------------------------
--- NEW TABLE: transactions (PayPal)
+-- NEW TABLE: transactions (Payments)
 ----------------------------------------
 DROP TABLE IF EXISTS `transactions`;
 CREATE TABLE `transactions` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `order_id` INT NOT NULL,
-  `paypal_orderId` VARCHAR(64) NOT NULL,
-  `payerId` VARCHAR(64) NOT NULL,
-  `payerEmail` VARCHAR(255) NOT NULL,
+  `payment_method` VARCHAR(50) NOT NULL,
+  `provider_txn_id` VARCHAR(100) NOT NULL,
   `amount` DECIMAL(10,2) NOT NULL,
-  `currency` VARCHAR(8) NOT NULL,
-  `status` VARCHAR(32) NOT NULL,
-  `time` DATETIME NOT NULL,
+  `status` VARCHAR(50) NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
