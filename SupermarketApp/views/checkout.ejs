@@ -5,6 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Checkout - Supermarket App</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .payment-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .payments {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 24px;
+      width: 100%;
+    }
+    .payment-box {
+      min-height: 260px;
+      padding: 16px;
+      border: 1px solid #e6e6e6;
+      border-radius: 8px;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      text-align: center;
+    }
+    @media (max-width: 768px) {
+      .payments {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
   <% if (paypalClientId) { %>
     <script src="https://www.paypal.com/sdk/js?client-id=<%= paypalClientId %>&currency=SGD"></script>
   <% } %>
@@ -98,13 +128,30 @@
         </table>
       </div>
 
-      <div class="d-flex flex-wrap gap-3 justify-content-between align-items-center">
+      <div class="payment-container">
         <a href="/cart" class="btn btn-secondary">Back to Cart</a>
 
-        <div class="text-end">
+        <div class="payments">
           <input type="hidden" id="app-order-id" value="<%= appOrderId || '' %>">
-          <div id="paypal-button-container" class="mb-2"></div>
-          <div id="paypal-error" class="text-danger small"></div>
+
+          <div class="payment-box nets">
+            <div class="fw-bold mb-2">NETS QR</div>
+            <button type="button" id="nets-qr-btn" class="btn btn-outline-dark btn-sm">
+              Pay with NETS QR
+            </button>
+            <div id="nets-error" class="text-danger small mt-2"></div>
+            <div id="nets-status" class="text-muted small mt-2"></div>
+            <div id="nets-qr-container" class="mt-3 d-none">
+              <div class="small text-muted mb-1">Scan to pay (NETS QR)</div>
+              <img id="nets-qr-image" alt="NETS QR" class="img-thumbnail" style="max-width: 220px;">
+            </div>
+          </div>
+
+          <div class="payment-box paypal">
+            <div class="fw-bold mb-2">PayPal</div>
+            <div id="paypal-button-container" class="mb-2"></div>
+            <div id="paypal-error" class="text-danger small"></div>
+          </div>
         </div>
       </div>
     <% } %>
@@ -116,24 +163,75 @@
     (function () {
       window.APP_ORDER_ID = <%- JSON.stringify(appOrderId || null) %>;
       const errorEl = document.getElementById("paypal-error");
+      const netsErrorEl = document.getElementById("nets-error");
+      const netsStatusEl = document.getElementById("nets-status");
+      const netsBtn = document.getElementById("nets-qr-btn");
+      const netsQrContainer = document.getElementById("nets-qr-container");
+      const netsQrImage = document.getElementById("nets-qr-image");
       const appOrderId = window.APP_ORDER_ID || document.getElementById("app-order-id").value;
       function showError(message) {
         if (errorEl) errorEl.textContent = message || "PayPal error.";
       }
+      function showNetsError(message) {
+        if (netsErrorEl) netsErrorEl.textContent = message || "";
+      }
 
       if (!window.paypal) {
         showError("PayPal SDK failed to load.");
-        return;
       }
 
       if (!appOrderId) {
         showError("Order not found. Please refresh the page.");
-        return;
       }
 
-      window.paypal.Buttons({
-        createOrder: function () {
-          return fetch("/api/paypal/create-order", {
+      if (window.paypal && appOrderId) {
+        window.paypal.Buttons({
+          createOrder: function () {
+            return fetch("/api/paypal/create-order", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ appOrderId: appOrderId })
+            })
+              .then(function (res) {
+                if (!res.ok) return res.json().then(function (e) { throw e; });
+                return res.json();
+              })
+              .then(function (data) {
+                if (!data || !data.id) throw new Error("No PayPal order id returned.");
+                return data.id;
+              });
+          },
+          onApprove: function (data) {
+            return fetch("/api/paypal/capture-order", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ paypalOrderId: data.orderID, appOrderId: appOrderId })
+            })
+              .then(function (res) {
+                if (!res.ok) return res.json().then(function (e) { throw e; });
+                return res.json();
+              })
+              .then(function () {
+                window.location.href = "/orders";
+              });
+          },
+          onError: function (err) {
+            const message = err && (err.error || err.message) ? (err.error || err.message) : "Payment failed.";
+            showError(message);
+          },
+          onCancel: function () {
+            showError("Payment cancelled. Please try again.");
+          }
+        }).render("#paypal-button-container");
+      }
+
+      if (netsBtn && appOrderId) {
+        netsBtn.addEventListener("click", function () {
+          showNetsError("");
+          if (netsStatusEl) {
+            netsStatusEl.textContent = "Requesting NETS QR...";
+          }
+          fetch("/api/nets/request", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ appOrderId: appOrderId })
@@ -143,32 +241,66 @@
               return res.json();
             })
             .then(function (data) {
-              if (!data || !data.id) throw new Error("No PayPal order id returned.");
-              return data.id;
-            });
-        },
-        onApprove: function (data) {
-          return fetch("/api/paypal/capture-order", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ paypalOrderId: data.orderID, appOrderId: appOrderId })
-          })
-            .then(function (res) {
-              if (!res.ok) return res.json().then(function (e) { throw e; });
-              return res.json();
+              if (!data || !data.qr_code) {
+                throw new Error("No NETS QR code returned.");
+              }
+              if (netsQrImage) {
+                netsQrImage.src = "data:image/png;base64," + data.qr_code;
+              }
+              if (netsQrContainer) {
+                netsQrContainer.classList.remove("d-none");
+              }
+              if (netsStatusEl) {
+                netsStatusEl.textContent = "Waiting for payment...";
+              }
+              if (data.txn_retrieval_ref) {
+                startSseStatus(data.txn_retrieval_ref);
+              }
             })
-            .then(function () {
-              window.location.href = "/orders";
+            .catch(function (err) {
+              const message = err && (err.error || err.message) ? (err.error || err.message) : "Failed to request NETS QR.";
+              showNetsError(message);
+              if (netsStatusEl) {
+                netsStatusEl.textContent = "";
+              }
             });
-        },
-        onError: function (err) {
-          const message = err && (err.error || err.message) ? (err.error || err.message) : "Payment failed.";
-          showError(message);
-        },
-        onCancel: function () {
-          showError("Payment cancelled. Please try again.");
+        });
+      }
+
+      let netsSse = null;
+      function startSseStatus(txnRetrievalRef) {
+        if (netsSse) {
+          netsSse.close();
+          netsSse = null;
         }
-      }).render("#paypal-button-container");
+        const timeoutMs = 5 * 60 * 1000;
+        const timeout = setTimeout(function () {
+          if (netsSse) netsSse.close();
+          if (netsStatusEl) netsStatusEl.textContent = "Still waiting for payment...";
+        }, timeoutMs);
+
+        netsSse = new EventSource("/api/nets/stream/" + encodeURIComponent(txnRetrievalRef));
+
+        netsSse.addEventListener("payment", function (event) {
+          const data = JSON.parse(event.data || "{}");
+          const status = String(data.status || "PENDING").toUpperCase();
+          if (status === "SUCCESS" || status === "COMPLETED") {
+            clearTimeout(timeout);
+            if (netsStatusEl) netsStatusEl.textContent = "Payment successful. Redirecting...";
+            window.location.href = "/orders";
+          } else if (status === "FAILED") {
+            clearTimeout(timeout);
+            showNetsError("Payment failed. Please try again.");
+            if (netsStatusEl) netsStatusEl.textContent = "";
+          }
+          if (netsSse) netsSse.close();
+        });
+
+        netsSse.addEventListener("error", function () {
+          // Ignore transient errors; keep waiting.
+          if (netsStatusEl) netsStatusEl.textContent = "Waiting for payment...";
+        });
+      }
     })();
   </script>
   <% } %>

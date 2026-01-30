@@ -7,7 +7,17 @@ function registerNetsRoutes(app, safeHandler, checkAuthenticated) {
     safeHandler(NetsController, "generateQr")
   );
   app.post(
+    "/api/nets/request",
+    checkAuthenticated,
+    safeHandler(NetsController, "generateQr")
+  );
+  app.post(
     "/api/nets/query-qr",
+    checkAuthenticated,
+    safeHandler(NetsController, "queryQrStatus")
+  );
+  app.post(
+    "/api/nets/query",
     checkAuthenticated,
     safeHandler(NetsController, "queryQrStatus")
   );
